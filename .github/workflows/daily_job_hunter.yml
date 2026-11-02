@@ -1,0 +1,30 @@
+name: Daily Job Hunter Scraper
+
+on:
+  schedule:
+    # Runs every day at 03:30 UTC (9:00 AM IST)
+    - cron: '30 3 * * *'
+  workflow_dispatch: # Allows manual trigger anytime from GitHub UI
+
+jobs:
+  scrape-and-email:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Dependencies
+        run: npm install nodemailer
+
+      - name: Run Job Scraper & Send Email
+        env:
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          SENDER_EMAIL: 'asyedabdulrahman3@gmail.com'
+        run: node scripts/fetch_daily_jobs.js
+

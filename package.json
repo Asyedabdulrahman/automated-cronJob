@@ -1,0 +1,13 @@
+{
+  "name": "automated-cronjob",
+  "version": "1.0.0",
+  "description": "Daily automated job scraping engine using Apify and LinkedIn, with email digest and CSV export",
+  "main": "scripts/fetch_daily_jobs.js",
+  "type": "module",
+  "scripts": {
+    "start": "node scripts/fetch_daily_jobs.js"
+  },
+  "dependencies": {
+    "nodemailer": "^6.9.16"
+  }
+}
