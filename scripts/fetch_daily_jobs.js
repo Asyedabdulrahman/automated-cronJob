@@ -28,8 +28,7 @@ const SEARCH_URLS = [
   'https://www.linkedin.com/jobs/search?keywords=Software%20Development%20Engineer&location=India&f_TPR=r86400&position=1&pageNum=0',
   'https://www.linkedin.com/jobs/search?keywords=Frontend%20Developer&location=India&f_TPR=r86400&position=1&pageNum=0',
   'https://www.linkedin.com/jobs/search?keywords=Backend%20Developer&location=India&f_TPR=r86400&position=1&pageNum=0',
-  'https://www.linkedin.com/jobs/search?keywords=React%20Developer%20OR%20Node.js%20Developer&location=India&f_TPR=r86400&position=1&pageNum=0',
-  'https://www.linkedin.com/jobs/search?keywords=SDE%20Chennai%20OR%20Bengaluru%20OR%20Hyderabad&location=India&f_TPR=r86400&position=1&pageNum=0'
+  'https://www.linkedin.com/jobs/search?keywords=React%20Developer%20OR%20Node.js%20Developer&location=India&f_TPR=r86400&position=1&pageNum=0'
 ];
 
 async function runJobHunter() {
@@ -152,6 +151,22 @@ async function sendJobDigestEmail({ recipient, dateStr, jobs, csvPath, csvFileNa
       }
     });
 
+    // Build WhatsApp Plain-Text Copy Block
+    const whatsappTextBlocks = jobs.map(job => {
+      let exp = 'Mid-Senior Level';
+      if (/Senior|Sr|Lead|Principal|III|IV/i.test(job.title)) exp = 'Senior Level';
+      else if (/Associate|Junior|Jr|Entry|Intern/i.test(job.title)) exp = 'Entry / Associate Level';
+
+      const cleanLink = job.link.split('?')[0];
+
+      return `Company : ${job.companyName}
+Role : ${job.title}
+Location : ${job.location || 'India'}
+Experience : ${exp}
+Link : ${cleanLink}`;
+    }).join('\n\n');
+
+    // Build Table for rich visual reading in email
     const jobTableRows = jobs.slice(0, 15).map((job, idx) => `
       <tr style="border-bottom: 1px solid #e2e8f0; ${idx % 2 === 0 ? 'background-color: #f8fafc;' : ''}">
         <td style="padding: 10px; font-weight: bold; color: #1e293b;">${idx + 1}</td>
@@ -166,29 +181,41 @@ async function sendJobDigestEmail({ recipient, dateStr, jobs, csvPath, csvFileNa
 
     const htmlContent = `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 800px; margin: auto; padding: 20px; background-color: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0;">
-        <h2 style="color: #0f172a; border-bottom: 2px solid #2563eb; padding-bottom: 10px;">
+        <h2 style="color: #0f172a; border-bottom: 2px solid #2563eb; padding-bottom: 10px; margin-top: 0;">
           🚀 Daily Fresh Software Engineer & Full-Stack Jobs (${dateStr})
         </h2>
         <p style="color: #475569; font-size: 15px;">
-          Hi Syed, here are today's top fresh engineering openings scraped directly from LinkedIn matching your profile.
+          Hi Syed, here are today's top fresh engineering openings scraped from LinkedIn.
         </p>
-        <div style="margin: 20px 0;">
-          <table style="width: 100%; border-collapse: collapse; font-size: 14px; text-align: left;">
-            <thead>
-              <tr style="background-color: #1e293b; color: #ffffff;">
-                <th style="padding: 10px;">#</th>
-                <th style="padding: 10px;">Role</th>
-                <th style="padding: 10px;">Company</th>
-                <th style="padding: 10px;">Location</th>
-                <th style="padding: 10px;">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${jobTableRows}
-            </tbody>
-          </table>
+
+        <!-- WHATSAPP READY COPY BLOCK -->
+        <div style="background-color: #f1f5f9; border-left: 4px solid #22c55e; padding: 16px; border-radius: 6px; margin: 20px 0;">
+          <h3 style="color: #0f172a; margin-top: 0; margin-bottom: 8px; font-size: 16px;">
+            📱 WhatsApp Ready Format (Tap & Copy below to paste in group):
+          </h3>
+          <pre style="white-space: pre-wrap; font-family: monospace; font-size: 13px; color: #1e293b; background: #ffffff; padding: 15px; border-radius: 6px; border: 1px solid #cbd5e1; user-select: all; line-height: 1.5;">${whatsappTextBlocks}</pre>
         </div>
-        <p style="color: #64748b; font-size: 13px;">
+
+        <!-- VISUAL TABLE -->
+        <h3 style="color: #0f172a; margin-top: 25px; margin-bottom: 10px; font-size: 16px;">
+          📊 Quick Overview Table:
+        </h3>
+        <table style="width: 100%; border-collapse: collapse; font-size: 14px; text-align: left;">
+          <thead>
+            <tr style="background-color: #1e293b; color: #ffffff;">
+              <th style="padding: 10px;">#</th>
+              <th style="padding: 10px;">Role</th>
+              <th style="padding: 10px;">Company</th>
+              <th style="padding: 10px;">Location</th>
+              <th style="padding: 10px;">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${jobTableRows}
+          </tbody>
+        </table>
+
+        <p style="color: #64748b; font-size: 13px; margin-top: 20px;">
           📎 <strong>The full spreadsheet is attached (${csvFileName})</strong> containing all ${jobs.length} curated jobs.
         </p>
       </div>
@@ -198,6 +225,7 @@ async function sendJobDigestEmail({ recipient, dateStr, jobs, csvPath, csvFileNa
       from: `"Job Hunter Bot" <${SENDER_EMAIL}>`,
       to: recipient,
       subject: `🎯 [Daily Jobs ${dateStr}] Top 20+ Software & Full-Stack Openings`,
+      text: whatsappTextBlocks,
       html: htmlContent,
       attachments: [
         {

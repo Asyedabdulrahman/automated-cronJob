@@ -22,3 +22,4 @@ node scripts/fetch_daily_jobs.js
 Add these repository secrets in GitHub under **Settings → Secrets and variables → Actions**:
 1. `APIFY_TOKEN`: Your Apify API token
 2. `GMAIL_APP_PASSWORD`: Your 16-letter Gmail App Password
+
