@@ -57,44 +57,6 @@ function getExperience(job) {
   return '1+ Years / Mid Level';
 }
 
-function getExpectedSalary(job) {
-  // If scraper found salary on LinkedIn
-  if (job.salary && typeof job.salary === 'string' && job.salary.trim() && !/not disclosed/i.test(job.salary)) {
-    return job.salary.trim();
-  }
-  if (job.salaryDescription && typeof job.salaryDescription === 'string' && job.salaryDescription.trim()) {
-    return job.salaryDescription.trim();
-  }
-  if (job.compensation && typeof job.compensation === 'string' && job.compensation.trim()) {
-    return job.compensation.trim();
-  }
-
-  const title = (job.title || '').toLowerCase();
-  const company = (job.companyName || '').toLowerCase();
-
-  // Tier 1 FAANG / High Paying Tier
-  const isTier1 = /google|microsoft|amazon|uber|apple|nvidia|atlassian|salesforce|databricks|stripe|linkedin|airbnb|rubrik|goldman sachs|morgan stanley|intuit/i.test(company);
-
-  if (/intern|internship|trainee/i.test(title)) {
-    return isTier1 ? '₹45,000 - ₹1,00,000 / month' : '₹25,000 - ₹60,000 / month';
-  }
-
-  if (/associate|junior|jr\b|entry|fresher|graduate|sde\s*1|sde-1|engineer\s*1|engineer-1/i.test(title)) {
-    return isTier1 ? '₹18 - ₹32 LPA' : '₹10 - ₹20 LPA';
-  }
-
-  if (/senior|sr\b|lead|principal|staff|architect|manager|iii|iv|director/i.test(title)) {
-    return isTier1 ? '₹40 - ₹80+ LPA' : '₹28 - ₹55 LPA';
-  }
-
-  if (/\bii\b|sde\s*2|sde-2|mid/i.test(title)) {
-    return isTier1 ? '₹28 - ₹45 LPA' : '₹18 - ₹30 LPA';
-  }
-
-  // Default software developer / engineer
-  return isTier1 ? '₹20 - ₹35 LPA' : '₹14 - ₹26 LPA';
-}
-
 async function runJobHunter() {
   console.log('🚀 Starting Job Hunter Daily Automated Run...');
   console.log(`🎯 Strictly filtering from: 80 Top Product-Based Companies in India`);
@@ -208,19 +170,17 @@ async function runJobHunter() {
   const outputPath = path.join(downloadsDir, outputFileName);
 
   const csvRows = [
-    ['S.No', 'Job Title', 'Company Name', 'Location', 'Experience', 'Expected Salary', 'LinkedIn Apply Link'].map(escapeCsv).join(',')
+    ['S.No', 'Job Title', 'Company Name', 'Location', 'Experience', 'LinkedIn Apply Link'].map(escapeCsv).join(',')
   ];
 
   selectedJobs.forEach((job, index) => {
     const exp = getExperience(job);
-    const salary = getExpectedSalary(job);
     csvRows.push([
       index + 1,
       job.title || '',
       job.companyName || '',
       job.location || 'India',
       exp,
-      salary,
       job.link.split('?')[0] || ''
     ].map(escapeCsv).join(','));
   });
@@ -254,14 +214,12 @@ async function sendJobDigestEmail({ recipient, dateStr, jobs, csvPath, csvFileNa
 
     const whatsappTextBlocks = jobs.map(job => {
       const exp = getExperience(job);
-      const salary = getExpectedSalary(job);
       const cleanLink = job.link.split('?')[0];
 
       return `Company : ${job.companyName}
 Role : ${job.title}
 Location : ${job.location || 'India'}
 Experience : ${exp}
-Expected Salary : ${salary}
 Link : ${cleanLink}`;
     }).join('\n\n');
 
@@ -271,7 +229,7 @@ Link : ${cleanLink}`;
           🚀 Daily Top Product Companies Jobs (${dateStr})
         </h2>
         <p style="color: #475569; font-size: 15px;">
-          Hi Syed, here are today's fresh developer and internship openings strictly filtered from the <strong>Top 80 Product-Based Companies</strong> in India with <strong>Expected Salary</strong> benchmarks.
+          Hi Syed, here are today's fresh developer and internship openings strictly filtered from the <strong>Top 80 Product-Based Companies</strong> in India.
         </p>
 
         <!-- WHATSAPP READY COPY BLOCK -->
@@ -283,7 +241,7 @@ Link : ${cleanLink}`;
         </div>
 
         <p style="color: #1e293b; font-size: 14px; margin-top: 20px; background-color: #eff6ff; padding: 12px; border-radius: 6px; border: 1px solid #bfdbfe;">
-          📎 <strong>CSV Spreadsheet Attached:</strong> <code>${csvFileName}</code> is attached to this email containing all curated jobs with Expected Salary.
+          📎 <strong>CSV Spreadsheet Attached:</strong> <code>${csvFileName}</code> is attached to this email containing all curated jobs.
         </p>
       </div>
     `;
