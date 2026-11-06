@@ -20,20 +20,37 @@ if (!APIFY_TOKEN) {
   process.exit(1);
 }
 
-const STRICT_KEYWORDS_REGEX = /(full[\s-]?stack|frontend|front[\s-]?end|backend|back[\s-]?end|software (developer|engineer)|sde|react|next\.?js|node\.?js|mern|pern|product engineer|web developer|api engineer)/i;
-const EXCLUDE_REGEX = /(sap|salesforce|data scientist|analyst|hardware|firmware|embedded|fpga|dsp|civil|mechanical|technician|hr|marketing|recruiter|sales|finance|accountant|telecaller|bpo|support|lead physical|synthesis|power engineer)/i;
-
-const SEARCH_URLS = [
-  'https://www.linkedin.com/jobs/search?keywords=Full%20Stack%20Developer&location=India&f_TPR=r86400&position=1&pageNum=0',
-  'https://www.linkedin.com/jobs/search?keywords=Software%20Development%20Engineer&location=India&f_TPR=r86400&position=1&pageNum=0',
-  'https://www.linkedin.com/jobs/search?keywords=Frontend%20Developer&location=India&f_TPR=r86400&position=1&pageNum=0',
-  'https://www.linkedin.com/jobs/search?keywords=Backend%20Developer&location=India&f_TPR=r86400&position=1&pageNum=0',
-  'https://www.linkedin.com/jobs/search?keywords=React%20Developer%20OR%20Node.js%20Developer&location=India&f_TPR=r86400&position=1&pageNum=0'
+/**
+ * 80 Top Product-Based Companies strictly targeted
+ */
+const TARGET_COMPANIES = [
+  "Google", "Microsoft", "Amazon", "Adobe", "Atlassian", "Salesforce", "Uber", "Apple", "NVIDIA", "ServiceNow",
+  "Cisco", "Oracle", "SAP Labs", "Qualcomm", "ARM", "Flipkart", "PhonePe", "Razorpay", "Freshworks", "CRED",
+  "Swiggy", "Zomato", "Zepto", "Dream11", "Groww", "Navi", "Paytm", "BrowserStack", "Postman", "Chargebee",
+  "Zoho", "InMobi", "Myntra", "Delhivery", "Policybazaar", "Sarvam AI", "Krutrim", "Moglix", "Darwinbox", "Khatabook",
+  "Acko", "Cashfree Payments", "Cashfree", "Exotel", "Plivo", "CleverTap", "Capillary Technologies", "Capillary", "Nium", "Fi Money",
+  "Fibe", "Ather Energy", "Ather", "Rapido", "Shadowfax", "Ninjacart", "BlackBuck", "Practo", "Rupeek", "CARS24",
+  "Rebel Foods", "Physics Wallah", "Scaler", "Walmart Global Tech", "Walmart", "Target", "JPMorgan Chase", "JPMorgan", "J.P. Morgan", "Goldman Sachs",
+  "Morgan Stanley", "Wells Fargo", "Deutsche Bank", "Samsung R&D", "Samsung", "Druva", "Databricks", "PayPal", "Stripe", "Intuit",
+  "LinkedIn", "Airbnb", "Rubrik", "Confluent", "Twilio", "Nutanix", "VMware", "Broadcom"
 ];
+
+// Targeted LinkedIn public search URLs structured around the 80 companies
+const SEARCH_URLS = [
+  'https://www.linkedin.com/jobs/search?keywords=Google%20OR%20Microsoft%20OR%20Amazon%20OR%20Adobe%20OR%20Atlassian%20OR%20Salesforce%20OR%20Uber%20OR%20Apple%20OR%20NVIDIA&location=India&f_TPR=r86400&position=1&pageNum=0',
+  'https://www.linkedin.com/jobs/search?keywords=ServiceNow%20OR%20Cisco%20OR%20Oracle%20OR%20Qualcomm%20OR%20ARM%20OR%20Flipkart%20OR%20PhonePe%20OR%20Razorpay%20OR%20Freshworks&location=India&f_TPR=r86400&position=1&pageNum=0',
+  'https://www.linkedin.com/jobs/search?keywords=CRED%20OR%20Swiggy%20OR%20Zomato%20OR%20Zepto%20OR%20Dream11%20OR%20Groww%20OR%20Navi%20OR%20Paytm%20OR%20BrowserStack%20OR%20Postman&location=India&f_TPR=r86400&position=1&pageNum=0',
+  'https://www.linkedin.com/jobs/search?keywords=Chargebee%20OR%20Zoho%20OR%20InMobi%20OR%20Myntra%20OR%20Delhivery%20OR%20Policybazaar%20OR%20Darwinbox%20OR%20Acko%20OR%20Cashfree&location=India&f_TPR=r86400&position=1&pageNum=0',
+  'https://www.linkedin.com/jobs/search?keywords=Walmart%20OR%20Target%20OR%20JPMorgan%20OR%20Goldman%20Sachs%20OR%20Morgan%20Stanley%20OR%20Wells%20Fargo%20OR%20Deutsche%20Bank&location=India&f_TPR=r86400&position=1&pageNum=0',
+  'https://www.linkedin.com/jobs/search?keywords=Samsung%20OR%20Druva%20OR%20Databricks%20OR%20PayPal%20OR%20Stripe%20OR%20Intuit%20OR%20LinkedIn%20OR%20Airbnb%20OR%20Rubrik%20OR%20Nutanix&location=India&f_TPR=r86400&position=1&pageNum=0'
+];
+
+const STRICT_DEV_REGEX = /(software|developer|engineer|sde|full[\s-]?stack|frontend|front[\s-]?end|backend|back[\s-]?end|web|react|node|intern|trainee)/i;
+const EXCLUDE_REGEX = /(sap abap|salesforce admin|tax|director|civil|mechanical|technician|hr|recruiter|sales|finance|accountant|telecaller|bpo|hardware lab|synthesis|power engineer)/i;
 
 async function runJobHunter() {
   console.log('🚀 Starting Job Hunter Daily Automated Run...');
-  console.log('🎯 Target: Software Developer, Full Stack, Frontend, Backend, React, Node, SDE');
+  console.log(`🎯 Strictly filtering from: 80 Top Product-Based Companies in India`);
 
   console.log('\n⏳ Step 1: Starting Apify cloud run...');
   const runResponse = await fetch(`https://api.apify.com/v2/acts/${ACTOR_ID}/runs`, {
@@ -45,7 +62,7 @@ async function runJobHunter() {
     body: JSON.stringify({
       urls: SEARCH_URLS,
       scrapeCompany: false,
-      count: 100
+      count: 120
     })
   });
 
@@ -90,15 +107,27 @@ async function runJobHunter() {
     if (!job.title || !job.companyName || !job.link) continue;
     if (seenUrls.has(job.link)) continue;
 
+    const companyName = job.companyName.trim();
+    const isTargetCompany = TARGET_COMPANIES.some(t => 
+      new RegExp(`(^|\\b|\\s)${t.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}(\\b|\\s|$)`, 'i').test(companyName)
+    );
+
+    if (!isTargetCompany) continue;
+
     const title = job.title.trim();
-    if (STRICT_KEYWORDS_REGEX.test(title) && !EXCLUDE_REGEX.test(title)) {
+    if (STRICT_DEV_REGEX.test(title) && !EXCLUDE_REGEX.test(title)) {
       seenUrls.add(job.link);
       matchedJobs.push(job);
     }
   }
 
-  console.log(`🎯 Quality matches found: ${matchedJobs.length}`);
-  const topJobs = matchedJobs.slice(0, 25);
+  console.log(`🎯 Quality matches found from 80 Target Companies: ${matchedJobs.length}`);
+
+  // Separate internships and regular / 1+ YOE roles
+  const internships = matchedJobs.filter(j => /intern|trainee|fresher|graduate/i.test(j.title));
+  const developerRoles = matchedJobs.filter(j => !/intern|trainee|fresher|graduate/i.test(j.title));
+
+  const selectedJobs = [...internships, ...developerRoles].slice(0, 30);
 
   const downloadsDir = path.join(os.homedir(), 'Downloads');
   if (!fs.existsSync(downloadsDir)) {
@@ -106,21 +135,26 @@ async function runJobHunter() {
   }
 
   const dateStr = new Date().toISOString().split('T')[0];
-  const outputFileName = `Daily_Software_Jobs_${dateStr}.csv`;
+  const outputFileName = `Daily_Top_Product_Jobs_${dateStr}.csv`;
   const outputPath = path.join(downloadsDir, outputFileName);
 
   const csvRows = [
-    ['S.No', 'Job Title', 'Company Name', 'Location', 'Date Posted', 'LinkedIn Apply Link'].map(escapeCsv).join(',')
+    ['S.No', 'Job Title', 'Company Name', 'Location', 'Experience', 'LinkedIn Apply Link'].map(escapeCsv).join(',')
   ];
 
-  topJobs.forEach((job, index) => {
+  selectedJobs.forEach((job, index) => {
+    let exp = '1+ Years / Mid Level';
+    if (/intern|trainee|fresher/i.test(job.title)) exp = 'Internship';
+    else if (/Senior|Sr|Lead|Principal|III|IV/i.test(job.title)) exp = 'Senior Level';
+    else if (/Associate|Junior|Jr|Entry/i.test(job.title)) exp = 'Entry / Associate (0 - 1+ Years)';
+
     csvRows.push([
       index + 1,
       job.title || '',
       job.companyName || '',
-      job.location || '',
-      job.postedAt || dateStr,
-      job.link || ''
+      job.location || 'India',
+      exp,
+      job.link.split('?')[0] || ''
     ].map(escapeCsv).join(','));
   });
 
@@ -132,7 +166,7 @@ async function runJobHunter() {
     await sendJobDigestEmail({
       recipient: RECIPIENT_EMAIL,
       dateStr,
-      jobs: topJobs,
+      jobs: selectedJobs,
       csvPath: outputPath,
       csvFileName: outputFileName
     });
@@ -151,11 +185,11 @@ async function sendJobDigestEmail({ recipient, dateStr, jobs, csvPath, csvFileNa
       }
     });
 
-    // Build WhatsApp Plain-Text Copy Block
     const whatsappTextBlocks = jobs.map(job => {
-      let exp = 'Mid-Senior Level';
-      if (/Senior|Sr|Lead|Principal|III|IV/i.test(job.title)) exp = 'Senior Level';
-      else if (/Associate|Junior|Jr|Entry|Intern/i.test(job.title)) exp = 'Entry / Associate Level';
+      let exp = '1+ Years / Mid Level';
+      if (/intern|trainee|fresher/i.test(job.title)) exp = 'Internship';
+      else if (/Senior|Sr|Lead|Principal|III|IV/i.test(job.title)) exp = 'Senior Level';
+      else if (/Associate|Junior|Jr|Entry/i.test(job.title)) exp = 'Entry / Associate (0 - 1+ Years)';
 
       const cleanLink = job.link.split('?')[0];
 
@@ -166,26 +200,13 @@ Experience : ${exp}
 Link : ${cleanLink}`;
     }).join('\n\n');
 
-    // Build Table for rich visual reading in email
-    const jobTableRows = jobs.slice(0, 15).map((job, idx) => `
-      <tr style="border-bottom: 1px solid #e2e8f0; ${idx % 2 === 0 ? 'background-color: #f8fafc;' : ''}">
-        <td style="padding: 10px; font-weight: bold; color: #1e293b;">${idx + 1}</td>
-        <td style="padding: 10px; color: #0f172a; font-weight: 600;">${job.title}</td>
-        <td style="padding: 10px; color: #334155;">${job.companyName}</td>
-        <td style="padding: 10px; color: #64748b;">${job.location}</td>
-        <td style="padding: 10px;">
-          <a href="${job.link}" style="background-color: #2563eb; color: #ffffff; padding: 6px 12px; text-decoration: none; border-radius: 4px; font-size: 13px; font-weight: bold; display: inline-block;">Apply Now</a>
-        </td>
-      </tr>
-    `).join('');
-
     const htmlContent = `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 800px; margin: auto; padding: 20px; background-color: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0;">
         <h2 style="color: #0f172a; border-bottom: 2px solid #2563eb; padding-bottom: 10px; margin-top: 0;">
-          🚀 Daily Fresh Software Engineer & Full-Stack Jobs (${dateStr})
+          🚀 Daily Top Product Companies Jobs (${dateStr})
         </h2>
         <p style="color: #475569; font-size: 15px;">
-          Hi Syed, here are today's top fresh engineering openings scraped from LinkedIn.
+          Hi Syed, here are today's fresh developer and internship openings strictly filtered from the <strong>Top 80 Product-Based Companies</strong> in India.
         </p>
 
         <!-- WHATSAPP READY COPY BLOCK -->
@@ -196,27 +217,8 @@ Link : ${cleanLink}`;
           <pre style="white-space: pre-wrap; font-family: monospace; font-size: 13px; color: #1e293b; background: #ffffff; padding: 15px; border-radius: 6px; border: 1px solid #cbd5e1; user-select: all; line-height: 1.5;">${whatsappTextBlocks}</pre>
         </div>
 
-        <!-- VISUAL TABLE -->
-        <h3 style="color: #0f172a; margin-top: 25px; margin-bottom: 10px; font-size: 16px;">
-          📊 Quick Overview Table:
-        </h3>
-        <table style="width: 100%; border-collapse: collapse; font-size: 14px; text-align: left;">
-          <thead>
-            <tr style="background-color: #1e293b; color: #ffffff;">
-              <th style="padding: 10px;">#</th>
-              <th style="padding: 10px;">Role</th>
-              <th style="padding: 10px;">Company</th>
-              <th style="padding: 10px;">Location</th>
-              <th style="padding: 10px;">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${jobTableRows}
-          </tbody>
-        </table>
-
-        <p style="color: #64748b; font-size: 13px; margin-top: 20px;">
-          📎 <strong>The full spreadsheet is attached (${csvFileName})</strong> containing all ${jobs.length} curated jobs.
+        <p style="color: #1e293b; font-size: 14px; margin-top: 20px; background-color: #eff6ff; padding: 12px; border-radius: 6px; border: 1px solid #bfdbfe;">
+          📎 <strong>CSV Spreadsheet Attached:</strong> <code>${csvFileName}</code> is attached to this email containing all curated jobs.
         </p>
       </div>
     `;
@@ -224,7 +226,7 @@ Link : ${cleanLink}`;
     await transporter.sendMail({
       from: `"Job Hunter Bot" <${SENDER_EMAIL}>`,
       to: recipient,
-      subject: `🎯 [Daily Jobs ${dateStr}] Top 20+ Software & Full-Stack Openings`,
+      subject: `🎯 [Top 80 Product Companies] Daily Developer Jobs (${dateStr})`,
       text: whatsappTextBlocks,
       html: htmlContent,
       attachments: [
