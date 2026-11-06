@@ -43,7 +43,7 @@ const SEARCH_URLS = [
   'https://www.linkedin.com/jobs/search?keywords=Chargebee%20OR%20Zoho%20OR%20InMobi%20OR%20Myntra%20OR%20Delhivery%20OR%20Policybazaar%20OR%20Darwinbox%20OR%20Acko%20OR%20Cashfree&location=India&f_TPR=r86400&position=1&pageNum=0',
   'https://www.linkedin.com/jobs/search?keywords=Walmart%20OR%20Target%20OR%20JPMorgan%20OR%20Goldman%20Sachs%20OR%20Morgan%20Stanley%20OR%20Wells%20Fargo%20OR%20Deutsche%20Bank&location=India&f_TPR=r86400&position=1&pageNum=0',
   'https://www.linkedin.com/jobs/search?keywords=Samsung%20OR%20Druva%20OR%20Databricks%20OR%20PayPal%20OR%20Stripe%20OR%20Intuit%20OR%20LinkedIn%20OR%20Airbnb%20OR%20Rubrik%20OR%20Nutanix&location=India&f_TPR=r86400&position=1&pageNum=0',
-  'https://www.linkedin.com/jobs/search?keywords=(intern%20OR%20internship)%20AND%20(software%20OR%20developer%20OR%20engineering)&location=India&f_TPR=r604800&position=1&pageNum=0'
+  'https://www.linkedin.com/jobs/search?keywords=(intern%20OR%20internship)%20AND%20(Google%20OR%20Microsoft%20OR%20Amazon%20OR%20Adobe%20OR%20Salesforce%20OR%20Uber%20OR%20NVIDIA%20OR%20ServiceNow%20OR%20Cisco%20OR%20Oracle%20OR%20Qualcomm%20OR%20Flipkart%20OR%20PhonePe%20OR%20Razorpay%20OR%20Swiggy%20OR%20Zomato%20OR%20Zepto%20OR%20Zoho%20OR%20Samsung%20OR%20Walmart%20OR%20Goldman%20Sachs%20OR%20Morgan%20Stanley%20OR%20PayPal%20OR%20Intuit)&location=India&f_TPR=r2592000&position=1&pageNum=0'
 ];
 
 const STRICT_DEV_REGEX = /(software|developer|engineer|sde|full[\s-]?stack|frontend|front[\s-]?end|backend|back[\s-]?end|web|react|node|intern|trainee)/i;
@@ -109,7 +109,7 @@ async function runJobHunter() {
     body: JSON.stringify({
       urls: SEARCH_URLS,
       scrapeCompany: false,
-      count: 140
+      count: 180
     })
   });
 
