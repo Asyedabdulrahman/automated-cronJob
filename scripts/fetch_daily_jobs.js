@@ -127,13 +127,21 @@ async function runJobHunter() {
   console.log('⏳ Step 2: Waiting for job listings to be gathered...');
   let status = 'RUNNING';
   while (status === 'RUNNING' || status === 'READY') {
-    await new Promise(r => setTimeout(r, 4000));
-    const checkRes = await fetch(`https://api.apify.com/v2/actor-runs/${runId}`, {
-      headers: { 'Authorization': `Bearer ${APIFY_TOKEN}` }
-    });
-    const checkData = await checkRes.json();
-    status = checkData.data?.status;
-    process.stdout.write(`...status: ${status}\n`);
+    await new Promise(r => setTimeout(r, 5000));
+    try {
+      const checkRes = await fetch(`https://api.apify.com/v2/actor-runs/${runId}`, {
+        headers: { 'Authorization': `Bearer ${APIFY_TOKEN}` }
+      });
+      if (checkRes.ok) {
+        const checkData = await checkRes.json();
+        status = checkData.data?.status || status;
+        process.stdout.write(`...status: ${status}\n`);
+      } else {
+        process.stdout.write(`...api returned ${checkRes.status}, retrying\n`);
+      }
+    } catch (e) {
+      process.stdout.write(`...poll retry: ${e.message}\n`);
+    }
   }
 
   if (status !== 'SUCCEEDED') {
