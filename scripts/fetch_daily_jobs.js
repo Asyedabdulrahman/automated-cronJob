@@ -35,18 +35,65 @@ const TARGET_COMPANIES = [
   "LinkedIn", "Airbnb", "Rubrik", "Confluent", "Twilio", "Nutanix", "VMware", "Broadcom"
 ];
 
-// Targeted LinkedIn public search URLs structured around the 80 companies
+// Targeted LinkedIn public search URLs structured around the 80 companies + tech internships
 const SEARCH_URLS = [
   'https://www.linkedin.com/jobs/search?keywords=Google%20OR%20Microsoft%20OR%20Amazon%20OR%20Adobe%20OR%20Atlassian%20OR%20Salesforce%20OR%20Uber%20OR%20Apple%20OR%20NVIDIA&location=India&f_TPR=r86400&position=1&pageNum=0',
   'https://www.linkedin.com/jobs/search?keywords=ServiceNow%20OR%20Cisco%20OR%20Oracle%20OR%20Qualcomm%20OR%20ARM%20OR%20Flipkart%20OR%20PhonePe%20OR%20Razorpay%20OR%20Freshworks&location=India&f_TPR=r86400&position=1&pageNum=0',
   'https://www.linkedin.com/jobs/search?keywords=CRED%20OR%20Swiggy%20OR%20Zomato%20OR%20Zepto%20OR%20Dream11%20OR%20Groww%20OR%20Navi%20OR%20Paytm%20OR%20BrowserStack%20OR%20Postman&location=India&f_TPR=r86400&position=1&pageNum=0',
   'https://www.linkedin.com/jobs/search?keywords=Chargebee%20OR%20Zoho%20OR%20InMobi%20OR%20Myntra%20OR%20Delhivery%20OR%20Policybazaar%20OR%20Darwinbox%20OR%20Acko%20OR%20Cashfree&location=India&f_TPR=r86400&position=1&pageNum=0',
   'https://www.linkedin.com/jobs/search?keywords=Walmart%20OR%20Target%20OR%20JPMorgan%20OR%20Goldman%20Sachs%20OR%20Morgan%20Stanley%20OR%20Wells%20Fargo%20OR%20Deutsche%20Bank&location=India&f_TPR=r86400&position=1&pageNum=0',
-  'https://www.linkedin.com/jobs/search?keywords=Samsung%20OR%20Druva%20OR%20Databricks%20OR%20PayPal%20OR%20Stripe%20OR%20Intuit%20OR%20LinkedIn%20OR%20Airbnb%20OR%20Rubrik%20OR%20Nutanix&location=India&f_TPR=r86400&position=1&pageNum=0'
+  'https://www.linkedin.com/jobs/search?keywords=Samsung%20OR%20Druva%20OR%20Databricks%20OR%20PayPal%20OR%20Stripe%20OR%20Intuit%20OR%20LinkedIn%20OR%20Airbnb%20OR%20Rubrik%20OR%20Nutanix&location=India&f_TPR=r86400&position=1&pageNum=0',
+  'https://www.linkedin.com/jobs/search?keywords=(intern%20OR%20internship)%20AND%20(software%20OR%20developer%20OR%20engineering)&location=India&f_TPR=r604800&position=1&pageNum=0'
 ];
 
 const STRICT_DEV_REGEX = /(software|developer|engineer|sde|full[\s-]?stack|frontend|front[\s-]?end|backend|back[\s-]?end|web|react|node|intern|trainee)/i;
 const EXCLUDE_REGEX = /(sap abap|salesforce admin|tax|director|civil|mechanical|technician|hr|recruiter|sales|finance|accountant|telecaller|bpo|hardware lab|synthesis|power engineer)/i;
+
+function getExperience(job) {
+  const title = job.title || '';
+  if (/intern|trainee|fresher/i.test(title)) return 'Internship';
+  if (/Senior|Sr\b|Lead|Principal|III|IV|Architect|Director|Manager/i.test(title)) return 'Senior Level';
+  if (/Associate|Junior|Jr\b|Entry|Graduate/i.test(title)) return 'Entry / Associate (0 - 1+ Years)';
+  return '1+ Years / Mid Level';
+}
+
+function getExpectedSalary(job) {
+  // If scraper found salary on LinkedIn
+  if (job.salary && typeof job.salary === 'string' && job.salary.trim() && !/not disclosed/i.test(job.salary)) {
+    return job.salary.trim();
+  }
+  if (job.salaryDescription && typeof job.salaryDescription === 'string' && job.salaryDescription.trim()) {
+    return job.salaryDescription.trim();
+  }
+  if (job.compensation && typeof job.compensation === 'string' && job.compensation.trim()) {
+    return job.compensation.trim();
+  }
+
+  const title = (job.title || '').toLowerCase();
+  const company = (job.companyName || '').toLowerCase();
+
+  // Tier 1 FAANG / High Paying Tier
+  const isTier1 = /google|microsoft|amazon|uber|apple|nvidia|atlassian|salesforce|databricks|stripe|linkedin|airbnb|rubrik|goldman sachs|morgan stanley|intuit/i.test(company);
+
+  if (/intern|internship|trainee/i.test(title)) {
+    return isTier1 ? '₹45,000 - ₹1,00,000 / month' : '₹25,000 - ₹60,000 / month';
+  }
+
+  if (/associate|junior|jr\b|entry|fresher|graduate|sde\s*1|sde-1|engineer\s*1|engineer-1/i.test(title)) {
+    return isTier1 ? '₹18 - ₹32 LPA' : '₹10 - ₹20 LPA';
+  }
+
+  if (/senior|sr\b|lead|principal|staff|architect|manager|iii|iv|director/i.test(title)) {
+    return isTier1 ? '₹40 - ₹80+ LPA' : '₹28 - ₹55 LPA';
+  }
+
+  if (/\bii\b|sde\s*2|sde-2|mid/i.test(title)) {
+    return isTier1 ? '₹28 - ₹45 LPA' : '₹18 - ₹30 LPA';
+  }
+
+  // Default software developer / engineer
+  return isTier1 ? '₹20 - ₹35 LPA' : '₹14 - ₹26 LPA';
+}
 
 async function runJobHunter() {
   console.log('🚀 Starting Job Hunter Daily Automated Run...');
@@ -62,7 +109,7 @@ async function runJobHunter() {
     body: JSON.stringify({
       urls: SEARCH_URLS,
       scrapeCompany: false,
-      count: 120
+      count: 140
     })
   });
 
@@ -127,7 +174,21 @@ async function runJobHunter() {
   const internships = matchedJobs.filter(j => /intern|trainee|fresher|graduate/i.test(j.title));
   const developerRoles = matchedJobs.filter(j => !/intern|trainee|fresher|graduate/i.test(j.title));
 
-  const selectedJobs = [...internships, ...developerRoles].slice(0, 30);
+  console.log(`   - Internships: ${internships.length}`);
+  console.log(`   - 1+ YOE / Experienced Roles: ${developerRoles.length}`);
+
+  // Ensure minimum 5 internships prioritized if available
+  const targetInternCount = Math.min(5, internships.length);
+  const selectedInternships = internships.slice(0, targetInternCount);
+  const remainingSlots = 30 - selectedInternships.length;
+  const otherInternships = internships.slice(targetInternCount);
+  const selectedJobs = [
+    ...selectedInternships,
+    ...developerRoles.slice(0, remainingSlots)
+  ];
+  if (selectedJobs.length < 30 && otherInternships.length > 0) {
+    selectedJobs.push(...otherInternships.slice(0, 30 - selectedJobs.length));
+  }
 
   const downloadsDir = path.join(os.homedir(), 'Downloads');
   if (!fs.existsSync(downloadsDir)) {
@@ -139,21 +200,19 @@ async function runJobHunter() {
   const outputPath = path.join(downloadsDir, outputFileName);
 
   const csvRows = [
-    ['S.No', 'Job Title', 'Company Name', 'Location', 'Experience', 'LinkedIn Apply Link'].map(escapeCsv).join(',')
+    ['S.No', 'Job Title', 'Company Name', 'Location', 'Experience', 'Expected Salary', 'LinkedIn Apply Link'].map(escapeCsv).join(',')
   ];
 
   selectedJobs.forEach((job, index) => {
-    let exp = '1+ Years / Mid Level';
-    if (/intern|trainee|fresher/i.test(job.title)) exp = 'Internship';
-    else if (/Senior|Sr|Lead|Principal|III|IV/i.test(job.title)) exp = 'Senior Level';
-    else if (/Associate|Junior|Jr|Entry/i.test(job.title)) exp = 'Entry / Associate (0 - 1+ Years)';
-
+    const exp = getExperience(job);
+    const salary = getExpectedSalary(job);
     csvRows.push([
       index + 1,
       job.title || '',
       job.companyName || '',
       job.location || 'India',
       exp,
+      salary,
       job.link.split('?')[0] || ''
     ].map(escapeCsv).join(','));
   });
@@ -186,17 +245,15 @@ async function sendJobDigestEmail({ recipient, dateStr, jobs, csvPath, csvFileNa
     });
 
     const whatsappTextBlocks = jobs.map(job => {
-      let exp = '1+ Years / Mid Level';
-      if (/intern|trainee|fresher/i.test(job.title)) exp = 'Internship';
-      else if (/Senior|Sr|Lead|Principal|III|IV/i.test(job.title)) exp = 'Senior Level';
-      else if (/Associate|Junior|Jr|Entry/i.test(job.title)) exp = 'Entry / Associate (0 - 1+ Years)';
-
+      const exp = getExperience(job);
+      const salary = getExpectedSalary(job);
       const cleanLink = job.link.split('?')[0];
 
       return `Company : ${job.companyName}
 Role : ${job.title}
 Location : ${job.location || 'India'}
 Experience : ${exp}
+Expected Salary : ${salary}
 Link : ${cleanLink}`;
     }).join('\n\n');
 
@@ -206,7 +263,7 @@ Link : ${cleanLink}`;
           🚀 Daily Top Product Companies Jobs (${dateStr})
         </h2>
         <p style="color: #475569; font-size: 15px;">
-          Hi Syed, here are today's fresh developer and internship openings strictly filtered from the <strong>Top 80 Product-Based Companies</strong> in India.
+          Hi Syed, here are today's fresh developer and internship openings strictly filtered from the <strong>Top 80 Product-Based Companies</strong> in India with <strong>Expected Salary</strong> benchmarks.
         </p>
 
         <!-- WHATSAPP READY COPY BLOCK -->
@@ -218,7 +275,7 @@ Link : ${cleanLink}`;
         </div>
 
         <p style="color: #1e293b; font-size: 14px; margin-top: 20px; background-color: #eff6ff; padding: 12px; border-radius: 6px; border: 1px solid #bfdbfe;">
-          📎 <strong>CSV Spreadsheet Attached:</strong> <code>${csvFileName}</code> is attached to this email containing all curated jobs.
+          📎 <strong>CSV Spreadsheet Attached:</strong> <code>${csvFileName}</code> is attached to this email containing all curated jobs with Expected Salary.
         </p>
       </div>
     `;
