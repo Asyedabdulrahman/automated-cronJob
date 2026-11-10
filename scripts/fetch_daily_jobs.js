@@ -15,11 +15,6 @@ const RECIPIENT_EMAIL = process.env.RECIPIENT_EMAIL || 'asyedabdulrahman3@gmail.
 const SENDER_EMAIL = process.env.SENDER_EMAIL || 'asyedabdulrahman3@gmail.com';
 const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
 
-if (!APIFY_TOKEN) {
-  console.error('❌ Error: APIFY_TOKEN environment variable is required.');
-  process.exit(1);
-}
-
 /**
  * 80 Top Product-Based Companies strictly targeted
  */
@@ -35,15 +30,15 @@ const TARGET_COMPANIES = [
   "LinkedIn", "Airbnb", "Rubrik", "Confluent", "Twilio", "Nutanix", "VMware", "Broadcom"
 ];
 
-// Targeted LinkedIn public search URLs structured around the 80 companies + tech internships
-const SEARCH_URLS = [
-  'https://www.linkedin.com/jobs/search?keywords=Google%20OR%20Microsoft%20OR%20Amazon%20OR%20Adobe%20OR%20Atlassian%20OR%20Salesforce%20OR%20Uber%20OR%20Apple%20OR%20NVIDIA&location=India&f_TPR=r86400&position=1&pageNum=0',
-  'https://www.linkedin.com/jobs/search?keywords=ServiceNow%20OR%20Cisco%20OR%20Oracle%20OR%20Qualcomm%20OR%20ARM%20OR%20Flipkart%20OR%20PhonePe%20OR%20Razorpay%20OR%20Freshworks&location=India&f_TPR=r86400&position=1&pageNum=0',
-  'https://www.linkedin.com/jobs/search?keywords=CRED%20OR%20Swiggy%20OR%20Zomato%20OR%20Zepto%20OR%20Dream11%20OR%20Groww%20OR%20Navi%20OR%20Paytm%20OR%20BrowserStack%20OR%20Postman&location=India&f_TPR=r86400&position=1&pageNum=0',
-  'https://www.linkedin.com/jobs/search?keywords=Chargebee%20OR%20Zoho%20OR%20InMobi%20OR%20Myntra%20OR%20Delhivery%20OR%20Policybazaar%20OR%20Darwinbox%20OR%20Acko%20OR%20Cashfree&location=India&f_TPR=r86400&position=1&pageNum=0',
-  'https://www.linkedin.com/jobs/search?keywords=Walmart%20OR%20Target%20OR%20JPMorgan%20OR%20Goldman%20Sachs%20OR%20Morgan%20Stanley%20OR%20Wells%20Fargo%20OR%20Deutsche%20Bank&location=India&f_TPR=r86400&position=1&pageNum=0',
-  'https://www.linkedin.com/jobs/search?keywords=Samsung%20OR%20Druva%20OR%20Databricks%20OR%20PayPal%20OR%20Stripe%20OR%20Intuit%20OR%20LinkedIn%20OR%20Airbnb%20OR%20Rubrik%20OR%20Nutanix&location=India&f_TPR=r86400&position=1&pageNum=0',
-  'https://www.linkedin.com/jobs/search?keywords=(intern%20OR%20internship)%20AND%20(Google%20OR%20Microsoft%20OR%20Amazon%20OR%20Adobe%20OR%20Salesforce%20OR%20Uber%20OR%20NVIDIA%20OR%20ServiceNow%20OR%20Cisco%20OR%20Oracle%20OR%20Qualcomm%20OR%20Flipkart%20OR%20PhonePe%20OR%20Razorpay%20OR%20Swiggy%20OR%20Zomato%20OR%20Zepto%20OR%20Zoho%20OR%20Samsung%20OR%20Walmart%20OR%20Goldman%20Sachs%20OR%20Morgan%20Stanley%20OR%20PayPal%20OR%20Intuit)&location=India&f_TPR=r2592000&position=1&pageNum=0'
+const SEARCH_QUERIES = [
+  'Google OR Microsoft OR Amazon OR Adobe OR Apple OR Uber OR NVIDIA OR Salesforce OR Atlassian',
+  'ServiceNow OR Cisco OR Oracle OR Qualcomm OR ARM OR Flipkart OR PhonePe OR Razorpay OR Freshworks',
+  'CRED OR Swiggy OR Zomato OR Zepto OR Dream11 OR Groww OR Navi OR Paytm OR BrowserStack OR Postman',
+  'Chargebee OR Zoho OR InMobi OR Myntra OR Delhivery OR Policybazaar OR Darwinbox OR Acko OR Cashfree',
+  'Walmart OR Target OR JPMorgan OR Goldman Sachs OR Morgan Stanley OR Wells Fargo OR Deutsche Bank',
+  'Samsung OR Druva OR Databricks OR PayPal OR Stripe OR Intuit OR LinkedIn OR Airbnb OR Rubrik OR Nutanix',
+  '(intern OR internship) (Google OR Microsoft OR Amazon OR Adobe OR Salesforce OR Uber OR NVIDIA OR ServiceNow OR Cisco OR Oracle OR Qualcomm OR Flipkart OR PhonePe OR Razorpay OR Swiggy OR Zomato OR Zepto OR Zoho OR Samsung OR Walmart OR Goldman Sachs OR Morgan Stanley OR PayPal OR Intuit)',
+  '(software intern OR developer intern OR engineering intern) India'
 ];
 
 const STRICT_DEV_REGEX = /(software|developer|engineer|sde|full[\s-]?stack|frontend|front[\s-]?end|backend|back[\s-]?end|web|react|node|intern|trainee)/i;
@@ -57,70 +52,125 @@ function getExperience(job) {
   return '1+ Years / Mid Level';
 }
 
+async function scrapeViaApify() {
+  if (!APIFY_TOKEN) return null;
+  console.log('⏳ Attempting Apify cloud run...');
+  try {
+    const searchUrls = [
+      'https://www.linkedin.com/jobs/search?keywords=Google%20OR%20Microsoft%20OR%20Amazon%20OR%20Adobe%20OR%20Atlassian%20OR%20Salesforce%20OR%20Uber%20OR%20Apple%20OR%20NVIDIA&location=India&f_TPR=r86400&position=1&pageNum=0',
+      'https://www.linkedin.com/jobs/search?keywords=ServiceNow%20OR%20Cisco%20OR%20Oracle%20OR%20Qualcomm%20OR%20ARM%20OR%20Flipkart%20OR%20PhonePe%20OR%20Razorpay%20OR%20Freshworks&location=India&f_TPR=r86400&position=1&pageNum=0',
+      'https://www.linkedin.com/jobs/search?keywords=CRED%20OR%20Swiggy%20OR%20Zomato%20OR%20Zepto%20OR%20Dream11%20OR%20Groww%20OR%20Navi%20OR%20Paytm%20OR%20BrowserStack%20OR%20Postman&location=India&f_TPR=r86400&position=1&pageNum=0',
+      'https://www.linkedin.com/jobs/search?keywords=Chargebee%20OR%20Zoho%20OR%20InMobi%20OR%20Myntra%20OR%20Delhivery%20OR%20Policybazaar%20OR%20Darwinbox%20OR%20Acko%20OR%20Cashfree&location=India&f_TPR=r86400&position=1&pageNum=0',
+      'https://www.linkedin.com/jobs/search?keywords=Walmart%20OR%20Target%20OR%20JPMorgan%20OR%20Goldman%20Sachs%20OR%20Morgan%20Stanley%20OR%20Wells%20Fargo%20OR%20Deutsche%20Bank&location=India&f_TPR=r86400&position=1&pageNum=0',
+      'https://www.linkedin.com/jobs/search?keywords=Samsung%20OR%20Druva%20OR%20Databricks%20OR%20PayPal%20OR%20Stripe%20OR%20Intuit%20OR%20LinkedIn%20OR%20Airbnb%20OR%20Rubrik%20OR%20Nutanix&location=India&f_TPR=r86400&position=1&pageNum=0',
+      'https://www.linkedin.com/jobs/search?keywords=(intern%20OR%20internship)%20AND%20(Google%20OR%20Microsoft%20OR%20Amazon%20OR%20Adobe%20OR%20Salesforce%20OR%20Uber%20OR%20NVIDIA%20OR%20ServiceNow%20OR%20Cisco%20OR%20Oracle%20OR%20Qualcomm%20OR%20Flipkart%20OR%20PhonePe%20OR%20Razorpay%20OR%20Swiggy%20OR%20Zomato%20OR%20Zepto%20OR%20Zoho%20OR%20Samsung%20OR%20Walmart%20OR%20Goldman%20Sachs%20OR%20Morgan%20Stanley%20OR%20PayPal%20OR%20Intuit)&location=India&f_TPR=r2592000&position=1&pageNum=0'
+    ];
+    const runResponse = await fetch(`https://api.apify.com/v2/acts/${ACTOR_ID}/runs`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${APIFY_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        urls: searchUrls,
+        scrapeCompany: false,
+        count: 180
+      })
+    });
+    const runData = await runResponse.json();
+    const runId = runData.data?.id;
+    const datasetId = runData.data?.defaultDatasetId;
+
+    if (!runId) {
+      console.warn('⚠️ Apify run did not start (e.g. usage limit reached), switching to Direct Scraper.');
+      return null;
+    }
+
+    let status = 'RUNNING';
+    while (status === 'RUNNING' || status === 'READY') {
+      await new Promise(r => setTimeout(r, 5000));
+      try {
+        const checkRes = await fetch(`https://api.apify.com/v2/actor-runs/${runId}`, {
+          headers: { 'Authorization': `Bearer ${APIFY_TOKEN}` }
+        });
+        if (checkRes.ok) {
+          const checkData = await checkRes.json();
+          status = checkData.data?.status || status;
+        }
+      } catch (e) {
+        // retry
+      }
+    }
+
+    if (status !== 'SUCCEEDED') return null;
+
+    const datasetRes = await fetch(`https://api.apify.com/v2/datasets/${datasetId}/items`, {
+      headers: { 'Authorization': `Bearer ${APIFY_TOKEN}` }
+    });
+    return await datasetRes.json();
+  } catch (err) {
+    console.warn(`⚠️ Apify error: ${err.message}. Falling back to Direct Scraper.`);
+    return null;
+  }
+}
+
+async function scrapeViaDirectLinkedIn() {
+  console.log('⚡ Using Direct LinkedIn Scraper (Fast, Free & Unlimited)...');
+  const allJobs = [];
+
+  for (const query of SEARCH_QUERIES) {
+    for (const start of [0, 25]) {
+      const url = `https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=${encodeURIComponent(query)}&location=India&f_TPR=r604800&start=${start}`;
+      try {
+        const res = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+          }
+        });
+        if (!res.ok) continue;
+        const html = await res.text();
+
+        const titles = [...html.matchAll(/<h3 class="base-search-card__title">([\s\S]*?)<\/h3>/g)].map(m => m[1].trim());
+        const companies = [...html.matchAll(/<h4 class="base-search-card__subtitle">([\s\S]*?)<\/h4>/g)].map(m => m[1].replace(/<[^>]+>/g, '').trim());
+        const locations = [...html.matchAll(/<span class="job-search-card__location">([\s\S]*?)<\/span>/g)].map(m => m[1].trim());
+        const links = [...html.matchAll(/<a class="base-card__full-link[^"]*" href="([^"]+)"/g)].map(m => m[1].split('?')[0]);
+
+        for (let i = 0; i < titles.length; i++) {
+          if (titles[i] && companies[i] && links[i]) {
+            allJobs.push({
+              title: titles[i],
+              companyName: companies[i],
+              location: locations[i] || 'India',
+              link: links[i]
+            });
+          }
+        }
+        await new Promise(r => setTimeout(r, 400));
+      } catch (e) {
+        // continue
+      }
+    }
+  }
+
+  return allJobs;
+}
+
 async function runJobHunter() {
   console.log('🚀 Starting Job Hunter Daily Automated Run...');
   console.log(`🎯 Strictly filtering from: 80 Top Product-Based Companies in India`);
 
-  console.log('\n⏳ Step 1: Starting Apify cloud run...');
-  const runResponse = await fetch(`https://api.apify.com/v2/acts/${ACTOR_ID}/runs`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${APIFY_TOKEN}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      urls: SEARCH_URLS,
-      scrapeCompany: false,
-      count: 180
-    })
-  });
-
-  const runData = await runResponse.json();
-  const runId = runData.data?.id;
-  const datasetId = runData.data?.defaultDatasetId;
-
-  if (!runId) {
-    console.error('❌ Failed to start run:', runData);
-    return;
+  let rawJobs = await scrapeViaApify();
+  if (!rawJobs || rawJobs.length === 0) {
+    rawJobs = await scrapeViaDirectLinkedIn();
   }
 
-  console.log(`✅ Run started: ${runId}`);
-
-  console.log('⏳ Step 2: Waiting for job listings to be gathered...');
-  let status = 'RUNNING';
-  while (status === 'RUNNING' || status === 'READY') {
-    await new Promise(r => setTimeout(r, 5000));
-    try {
-      const checkRes = await fetch(`https://api.apify.com/v2/actor-runs/${runId}`, {
-        headers: { 'Authorization': `Bearer ${APIFY_TOKEN}` }
-      });
-      if (checkRes.ok) {
-        const checkData = await checkRes.json();
-        status = checkData.data?.status || status;
-        process.stdout.write(`...status: ${status}\n`);
-      } else {
-        process.stdout.write(`...api returned ${checkRes.status}, retrying\n`);
-      }
-    } catch (e) {
-      process.stdout.write(`...poll retry: ${e.message}\n`);
-    }
-  }
-
-  if (status !== 'SUCCEEDED') {
-    console.error(`❌ Scrape ended with status: ${status}`);
-    return;
-  }
-
-  console.log('⏳ Step 3: Fetching and parsing items...');
-  const datasetRes = await fetch(`https://api.apify.com/v2/datasets/${datasetId}/items`, {
-    headers: { 'Authorization': `Bearer ${APIFY_TOKEN}` }
-  });
-  const items = await datasetRes.json();
+  console.log(`\n⏳ Processing ${rawJobs.length} gathered job listings...`);
 
   const seenUrls = new Set();
   const matchedJobs = [];
 
-  for (const job of items) {
+  for (const job of rawJobs) {
     if (!job.title || !job.companyName || !job.link) continue;
     if (seenUrls.has(job.link)) continue;
 
@@ -200,6 +250,8 @@ async function runJobHunter() {
   } else {
     console.log(`\nℹ️ Email not sent: GMAIL_APP_PASSWORD environment variable is not set.`);
   }
+
+  return selectedJobs;
 }
 
 async function sendJobDigestEmail({ recipient, dateStr, jobs, csvPath, csvFileName }) {
