@@ -37,12 +37,26 @@ const SEARCH_QUERIES = [
   'Chargebee OR Zoho OR InMobi OR Myntra OR Delhivery OR Policybazaar OR Darwinbox OR Acko OR Cashfree',
   'Walmart OR Target OR JPMorgan OR Goldman Sachs OR Morgan Stanley OR Wells Fargo OR Deutsche Bank',
   'Samsung OR Druva OR Databricks OR PayPal OR Stripe OR Intuit OR LinkedIn OR Airbnb OR Rubrik OR Nutanix',
+  '(software OR developer OR engineer) (Google OR Microsoft OR Amazon OR Flipkart OR PhonePe OR Razorpay OR Swiggy OR Zomato OR Zepto OR Paytm OR Groww OR CRED OR Uber OR Atlassian)'
+];
+
+const INTERNSHIP_QUERIES = [
   '(intern OR internship) (Google OR Microsoft OR Amazon OR Adobe OR Salesforce OR Uber OR NVIDIA OR ServiceNow OR Cisco OR Oracle OR Qualcomm OR Flipkart OR PhonePe OR Razorpay OR Swiggy OR Zomato OR Zepto OR Zoho OR Samsung OR Walmart OR Goldman Sachs OR Morgan Stanley OR PayPal OR Intuit)',
-  '(software intern OR developer intern OR engineering intern) India'
+  '(software intern OR developer intern OR engineering intern) (Atlassian OR BrowserStack OR Postman OR CRED OR Groww OR Paytm OR Freshworks OR Chargebee OR InMobi OR Databricks OR Stripe OR Intuit)'
 ];
 
 const STRICT_DEV_REGEX = /(software|developer|engineer|sde|full[\s-]?stack|frontend|front[\s-]?end|backend|back[\s-]?end|web|react|node|intern|trainee)/i;
-const EXCLUDE_REGEX = /(sap abap|salesforce admin|tax|director|civil|mechanical|technician|hr|recruiter|sales|finance|accountant|telecaller|bpo|hardware lab|synthesis|power engineer)/i;
+const EXCLUDE_REGEX = /(sap abap|salesforce admin|tax|director|civil|mechanical|technician|hr|recruiter|sales|finance|accountant|telecaller|bpo|hardware lab|synthesis|power engineer|audit|vendor consultant|process lead)/i;
+
+function decodeHtml(str) {
+  if (!str) return '';
+  return str
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
 
 function getExperience(job) {
   const title = job.title || '';
@@ -52,18 +66,73 @@ function getExperience(job) {
   return '1+ Years / Mid Level';
 }
 
+function parseMinutesAgo(postedAgo) {
+  if (!postedAgo) return 999999;
+  const lower = postedAgo.toLowerCase();
+  const numMatch = lower.match(/(\d+)/);
+  const num = numMatch ? parseInt(numMatch[1], 10) : 1;
+  if (lower.includes('just now') || lower.includes('second')) return 0;
+  if (lower.includes('minute')) return num;
+  if (lower.includes('hour')) return num * 60;
+  if (lower.includes('day')) return num * 1440;
+  if (lower.includes('week')) return num * 10080;
+  return 999999;
+}
+
+async function fetchLinkedInCards(query, timeFilter, pages = [0, 10, 20]) {
+  const jobs = [];
+  for (const start of pages) {
+    const url = `https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=${encodeURIComponent(query)}&location=India&f_TPR=${timeFilter}&sortBy=DD&start=${start}`;
+    try {
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+        }
+      });
+      if (!res.ok) continue;
+      const html = await res.text();
+      const cards = html.split('<li>').slice(1);
+      for (const c of cards) {
+        const titleRaw = (c.match(/<h3 class="base-search-card__title">([\s\S]*?)<\/h3>/) || [])[1]?.trim();
+        const companyRaw = (c.match(/<h4 class="base-search-card__subtitle">([\s\S]*?)<\/h4>/) || [])[1]?.replace(/<[^>]+>/g, '').trim();
+        const locRaw = (c.match(/<span class="job-search-card__location">([\s\S]*?)<\/span>/) || [])[1]?.trim();
+        const link = (c.match(/<a class="base-card__full-link[^"]*" href="([^"]+)"/) || [])[1]?.split('?')[0];
+        const postedAgo = (c.match(/<time[^>]*>([\s\S]*?)<\/time>/) || [])[1]?.trim() || '';
+        const postedDate = (c.match(/datetime="([^"]+)"/) || [])[1] || '';
+
+        if (titleRaw && companyRaw && link) {
+          jobs.push({
+            title: decodeHtml(titleRaw),
+            companyName: decodeHtml(companyRaw),
+            location: decodeHtml(locRaw || 'India'),
+            link,
+            postedAgo,
+            postedDate,
+            minutesAgo: parseMinutesAgo(postedAgo)
+          });
+        }
+      }
+      await new Promise(r => setTimeout(r, 350));
+    } catch (e) {
+      // continue
+    }
+  }
+  return jobs;
+}
+
 async function scrapeViaApify() {
   if (!APIFY_TOKEN) return null;
   console.log('⏳ Attempting Apify cloud run...');
   try {
     const searchUrls = [
-      'https://www.linkedin.com/jobs/search?keywords=Google%20OR%20Microsoft%20OR%20Amazon%20OR%20Adobe%20OR%20Atlassian%20OR%20Salesforce%20OR%20Uber%20OR%20Apple%20OR%20NVIDIA&location=India&f_TPR=r86400&position=1&pageNum=0',
-      'https://www.linkedin.com/jobs/search?keywords=ServiceNow%20OR%20Cisco%20OR%20Oracle%20OR%20Qualcomm%20OR%20ARM%20OR%20Flipkart%20OR%20PhonePe%20OR%20Razorpay%20OR%20Freshworks&location=India&f_TPR=r86400&position=1&pageNum=0',
-      'https://www.linkedin.com/jobs/search?keywords=CRED%20OR%20Swiggy%20OR%20Zomato%20OR%20Zepto%20OR%20Dream11%20OR%20Groww%20OR%20Navi%20OR%20Paytm%20OR%20BrowserStack%20OR%20Postman&location=India&f_TPR=r86400&position=1&pageNum=0',
-      'https://www.linkedin.com/jobs/search?keywords=Chargebee%20OR%20Zoho%20OR%20InMobi%20OR%20Myntra%20OR%20Delhivery%20OR%20Policybazaar%20OR%20Darwinbox%20OR%20Acko%20OR%20Cashfree&location=India&f_TPR=r86400&position=1&pageNum=0',
-      'https://www.linkedin.com/jobs/search?keywords=Walmart%20OR%20Target%20OR%20JPMorgan%20OR%20Goldman%20Sachs%20OR%20Morgan%20Stanley%20OR%20Wells%20Fargo%20OR%20Deutsche%20Bank&location=India&f_TPR=r86400&position=1&pageNum=0',
-      'https://www.linkedin.com/jobs/search?keywords=Samsung%20OR%20Druva%20OR%20Databricks%20OR%20PayPal%20OR%20Stripe%20OR%20Intuit%20OR%20LinkedIn%20OR%20Airbnb%20OR%20Rubrik%20OR%20Nutanix&location=India&f_TPR=r86400&position=1&pageNum=0',
-      'https://www.linkedin.com/jobs/search?keywords=(intern%20OR%20internship)%20AND%20(Google%20OR%20Microsoft%20OR%20Amazon%20OR%20Adobe%20OR%20Salesforce%20OR%20Uber%20OR%20NVIDIA%20OR%20ServiceNow%20OR%20Cisco%20OR%20Oracle%20OR%20Qualcomm%20OR%20Flipkart%20OR%20PhonePe%20OR%20Razorpay%20OR%20Swiggy%20OR%20Zomato%20OR%20Zepto%20OR%20Zoho%20OR%20Samsung%20OR%20Walmart%20OR%20Goldman%20Sachs%20OR%20Morgan%20Stanley%20OR%20PayPal%20OR%20Intuit)&location=India&f_TPR=r2592000&position=1&pageNum=0'
+      'https://www.linkedin.com/jobs/search?keywords=Google%20OR%20Microsoft%20OR%20Amazon%20OR%20Adobe%20OR%20Atlassian%20OR%20Salesforce%20OR%20Uber%20OR%20Apple%20OR%20NVIDIA&location=India&f_TPR=r86400&sortBy=DD&position=1&pageNum=0',
+      'https://www.linkedin.com/jobs/search?keywords=ServiceNow%20OR%20Cisco%20OR%20Oracle%20OR%20Qualcomm%20OR%20ARM%20OR%20Flipkart%20OR%20PhonePe%20OR%20Razorpay%20OR%20Freshworks&location=India&f_TPR=r86400&sortBy=DD&position=1&pageNum=0',
+      'https://www.linkedin.com/jobs/search?keywords=CRED%20OR%20Swiggy%20OR%20Zomato%20OR%20Zepto%20OR%20Dream11%20OR%20Groww%20OR%20Navi%20OR%20Paytm%20OR%20BrowserStack%20OR%20Postman&location=India&f_TPR=r86400&sortBy=DD&position=1&pageNum=0',
+      'https://www.linkedin.com/jobs/search?keywords=Chargebee%20OR%20Zoho%20OR%20InMobi%20OR%20Myntra%20OR%20Delhivery%20OR%20Policybazaar%20OR%20Darwinbox%20OR%20Acko%20OR%20Cashfree&location=India&f_TPR=r86400&sortBy=DD&position=1&pageNum=0',
+      'https://www.linkedin.com/jobs/search?keywords=Walmart%20OR%20Target%20OR%20JPMorgan%20OR%20Goldman%20Sachs%20OR%20Morgan%20Stanley%20OR%20Wells%20Fargo%20OR%20Deutsche%20Bank&location=India&f_TPR=r86400&sortBy=DD&position=1&pageNum=0',
+      'https://www.linkedin.com/jobs/search?keywords=Samsung%20OR%20Druva%20OR%20Databricks%20OR%20PayPal%20OR%20Stripe%20OR%20Intuit%20OR%20LinkedIn%20OR%20Airbnb%20OR%20Rubrik%20OR%20Nutanix&location=India&f_TPR=r86400&sortBy=DD&position=1&pageNum=0',
+      'https://www.linkedin.com/jobs/search?keywords=(intern%20OR%20internship)%20AND%20(Google%20OR%20Microsoft%20OR%20Amazon%20OR%20Adobe%20OR%20Salesforce%20OR%20Uber%20OR%20NVIDIA%20OR%20ServiceNow%20OR%20Cisco%20OR%20Oracle%20OR%20Qualcomm%20OR%20Flipkart%20OR%20PhonePe%20OR%20Razorpay%20OR%20Swiggy%20OR%20Zomato%20OR%20Zepto%20OR%20Zoho%20OR%20Samsung%20OR%20Walmart%20OR%20Goldman%20Sachs%20OR%20Morgan%20Stanley%20OR%20PayPal%20OR%20Intuit)&location=India&f_TPR=r86400&sortBy=DD&position=1&pageNum=0'
     ];
     const runResponse = await fetch(`https://api.apify.com/v2/acts/${ACTOR_ID}/runs`, {
       method: 'POST',
@@ -115,50 +184,79 @@ async function scrapeViaApify() {
 }
 
 async function scrapeViaDirectLinkedIn() {
-  console.log('⚡ Using Direct LinkedIn Scraper (Fast, Free & Unlimited)...');
+  console.log('⚡ Using Direct LinkedIn Scraper (Past 24 Hours, Sorted Newest First)...');
   const allJobs = [];
 
+  // Fetch today's (24h) developer postings sorted by newest first
   for (const query of SEARCH_QUERIES) {
-    for (const start of [0, 25]) {
-      const url = `https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=${encodeURIComponent(query)}&location=India&f_TPR=r604800&start=${start}`;
-      try {
-        const res = await fetch(url, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-          }
-        });
-        if (!res.ok) continue;
-        const html = await res.text();
+    const jobs = await fetchLinkedInCards(query, 'r86400', [0, 10, 20]);
+    allJobs.push(...jobs);
+  }
 
-        const titles = [...html.matchAll(/<h3 class="base-search-card__title">([\s\S]*?)<\/h3>/g)].map(m => m[1].trim());
-        const companies = [...html.matchAll(/<h4 class="base-search-card__subtitle">([\s\S]*?)<\/h4>/g)].map(m => m[1].replace(/<[^>]+>/g, '').trim());
-        const locations = [...html.matchAll(/<span class="job-search-card__location">([\s\S]*?)<\/span>/g)].map(m => m[1].trim());
-        const links = [...html.matchAll(/<a class="base-card__full-link[^"]*" href="([^"]+)"/g)].map(m => m[1].split('?')[0]);
+  // Fetch today's (24h) internships first
+  let internJobs24h = [];
+  for (const iq of INTERNSHIP_QUERIES) {
+    const jobs = await fetchLinkedInCards(iq, 'r86400', [0, 10]);
+    internJobs24h.push(...jobs);
+  }
+  allJobs.push(...internJobs24h);
 
-        for (let i = 0; i < titles.length; i++) {
-          if (titles[i] && companies[i] && links[i]) {
-            allJobs.push({
-              title: titles[i],
-              companyName: companies[i],
-              location: locations[i] || 'India',
-              link: links[i]
-            });
-          }
-        }
-        await new Promise(r => setTimeout(r, 400));
-      } catch (e) {
-        // continue
-      }
+  // If fewer than 5 internships in 24h, also pull newest internships from past 7 days so minimum 5 are included
+  const matchedInterns24h = internJobs24h.filter(j =>
+    TARGET_COMPANIES.some(t => new RegExp(`(^|\\b|\\s)${t.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}(\\b|\\s|$)`, 'i').test(j.companyName)) &&
+    /intern|trainee|fresher|graduate/i.test(j.title)
+  );
+  if (matchedInterns24h.length < 5) {
+    console.log(`ℹ️ Only ${matchedInterns24h.length} internships posted in strict 24h window; fetching latest internships from past week to top up...`);
+    for (const iq of INTERNSHIP_QUERIES) {
+      const jobs = await fetchLinkedInCards(iq, 'r604800', [0, 10]);
+      allJobs.push(...jobs);
     }
   }
 
   return allJobs;
 }
 
+function filterAndDeduplicate(rawJobs) {
+  const seenUrls = new Set();
+  const seenSignatures = new Set();
+  const matchedJobs = [];
+
+  for (const job of rawJobs) {
+    if (!job.title || !job.companyName || !job.link) continue;
+    const cleanLink = job.link.split('?')[0];
+    if (seenUrls.has(cleanLink)) continue;
+
+    const companyName = job.companyName.trim();
+    const isTargetCompany = TARGET_COMPANIES.some(t => 
+      new RegExp(`(^|\\b|\\s)${t.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}(\\b|\\s|$)`, 'i').test(companyName)
+    );
+    if (!isTargetCompany) continue;
+
+    const title = job.title.trim();
+    const sig = `${companyName.toLowerCase()}|${title.toLowerCase()}|${(job.location || '').toLowerCase()}`;
+    if (seenSignatures.has(sig)) continue;
+
+    if (STRICT_DEV_REGEX.test(title) && !EXCLUDE_REGEX.test(title)) {
+      seenUrls.add(cleanLink);
+      seenSignatures.add(sig);
+      matchedJobs.push({
+        ...job,
+        title,
+        companyName,
+        link: cleanLink
+      });
+    }
+  }
+
+  // Sort strictly by newest posted first
+  matchedJobs.sort((a, b) => (a.minutesAgo ?? 999999) - (b.minutesAgo ?? 999999));
+  return matchedJobs;
+}
+
 async function runJobHunter() {
   console.log('🚀 Starting Job Hunter Daily Automated Run...');
-  console.log(`🎯 Strictly filtering from: 80 Top Product-Based Companies in India`);
+  console.log(`🎯 Strictly filtering from: 80 Top Product-Based Companies in India (Latest Today)`);
 
   let rawJobs = await scrapeViaApify();
   if (!rawJobs || rawJobs.length === 0) {
@@ -166,38 +264,18 @@ async function runJobHunter() {
   }
 
   console.log(`\n⏳ Processing ${rawJobs.length} gathered job listings...`);
-
-  const seenUrls = new Set();
-  const matchedJobs = [];
-
-  for (const job of rawJobs) {
-    if (!job.title || !job.companyName || !job.link) continue;
-    if (seenUrls.has(job.link)) continue;
-
-    const companyName = job.companyName.trim();
-    const isTargetCompany = TARGET_COMPANIES.some(t => 
-      new RegExp(`(^|\\b|\\s)${t.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}(\\b|\\s|$)`, 'i').test(companyName)
-    );
-
-    if (!isTargetCompany) continue;
-
-    const title = job.title.trim();
-    if (STRICT_DEV_REGEX.test(title) && !EXCLUDE_REGEX.test(title)) {
-      seenUrls.add(job.link);
-      matchedJobs.push(job);
-    }
-  }
+  const matchedJobs = filterAndDeduplicate(rawJobs);
 
   console.log(`🎯 Quality matches found from 80 Target Companies: ${matchedJobs.length}`);
 
-  // Separate internships and regular / 1+ YOE roles
+  // Separate internships and regular / 1+ YOE roles (both sorted newest first)
   const internships = matchedJobs.filter(j => /intern|trainee|fresher|graduate/i.test(j.title));
   const developerRoles = matchedJobs.filter(j => !/intern|trainee|fresher|graduate/i.test(j.title));
 
   console.log(`   - Internships: ${internships.length}`);
-  console.log(`   - 1+ YOE / Experienced Roles: ${developerRoles.length}`);
+  console.log(`   - 1+ YOE / Experienced Roles (Last 24h): ${developerRoles.length}`);
 
-  // Ensure minimum 5 internships prioritized if available
+  // Ensure minimum 5 internships prioritized if available, then newest developer roles
   const targetInternCount = Math.min(5, internships.length);
   const selectedInternships = internships.slice(0, targetInternCount);
   const remainingSlots = 30 - selectedInternships.length;
@@ -220,18 +298,20 @@ async function runJobHunter() {
   const outputPath = path.join(downloadsDir, outputFileName);
 
   const csvRows = [
-    ['S.No', 'Job Title', 'Company Name', 'Location', 'Experience', 'LinkedIn Apply Link'].map(escapeCsv).join(',')
+    ['S.No', 'Job Title', 'Company Name', 'Location', 'Experience', 'Posted', 'LinkedIn Apply Link'].map(escapeCsv).join(',')
   ];
 
   selectedJobs.forEach((job, index) => {
     const exp = getExperience(job);
+    const posted = job.postedAgo ? `${job.postedAgo} (${job.postedDate || dateStr})` : (job.postedDate || 'Today');
     csvRows.push([
       index + 1,
       job.title || '',
       job.companyName || '',
       job.location || 'India',
       exp,
-      job.link.split('?')[0] || ''
+      posted,
+      job.link || ''
     ].map(escapeCsv).join(','));
   });
 
@@ -281,7 +361,7 @@ Link : ${cleanLink}`;
           🚀 Daily Top Product Companies Jobs (${dateStr})
         </h2>
         <p style="color: #475569; font-size: 15px;">
-          Hi Syed, here are today's fresh developer and internship openings strictly filtered from the <strong>Top 80 Product-Based Companies</strong> in India.
+          Hi Syed, here are today's latest fresh developer and internship openings strictly filtered from the <strong>Top 80 Product-Based Companies</strong> in India (sorted newest first).
         </p>
 
         <!-- WHATSAPP READY COPY BLOCK -->
@@ -301,7 +381,7 @@ Link : ${cleanLink}`;
     await transporter.sendMail({
       from: `"Job Hunter Bot" <${SENDER_EMAIL}>`,
       to: recipient,
-      subject: `🎯 [Top 80 Product Companies] Daily Developer Jobs (${dateStr})`,
+      subject: `🎯 [Top 80 Product Companies] Today's Latest Developer Jobs (${dateStr})`,
       text: whatsappTextBlocks,
       html: htmlContent,
       attachments: [
