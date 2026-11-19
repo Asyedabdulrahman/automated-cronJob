@@ -7,14 +7,18 @@ import nodemailer from 'nodemailer';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Read from Environment Variables (Secure)
+const APIFY_TOKEN = process.env.APIFY_TOKEN;
+const ACTOR_ID = 'curious_coder~linkedin-jobs-scraper';
+
 const RECIPIENT_EMAIL = process.env.RECIPIENT_EMAIL || 'asyedabdulrahman3@gmail.com';
 const SENDER_EMAIL = process.env.SENDER_EMAIL || 'asyedabdulrahman3@gmail.com';
 const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
 
 /**
- * Target 80 Product-Based Companies in India + Leading Tech Employers
+ * 80 Top Product-Based Companies strictly targeted
  */
-const TARGET_80_COMPANIES = [
+const TARGET_COMPANIES = [
   "Google", "Microsoft", "Amazon", "Adobe", "Atlassian", "Salesforce", "Uber", "Apple", "NVIDIA", "ServiceNow",
   "Cisco", "Oracle", "SAP Labs", "Qualcomm", "ARM", "Flipkart", "PhonePe", "Razorpay", "Freshworks", "CRED",
   "Swiggy", "Zomato", "Zepto", "Dream11", "Groww", "Navi", "Paytm", "BrowserStack", "Postman", "Chargebee",
@@ -26,7 +30,18 @@ const TARGET_80_COMPANIES = [
   "LinkedIn", "Airbnb", "Rubrik", "Confluent", "Twilio", "Nutanix", "VMware", "Broadcom"
 ];
 
-// Targeted search queries focused strictly on Frontend, Backend, SDE, and Software Engineer internships
+// Targeted search queries for Top Product Companies
+const SEARCH_QUERIES = [
+  'Google OR Microsoft OR Amazon OR Adobe OR Apple OR Uber OR NVIDIA OR Salesforce OR Atlassian',
+  'ServiceNow OR Cisco OR Oracle OR Qualcomm OR ARM OR Flipkart OR PhonePe OR Razorpay OR Freshworks',
+  'CRED OR Swiggy OR Zomato OR Zepto OR Dream11 OR Groww OR Navi OR Paytm OR BrowserStack OR Postman',
+  'Chargebee OR Zoho OR InMobi OR Myntra OR Delhivery OR Policybazaar OR Darwinbox OR Acko OR Cashfree',
+  'Walmart OR Target OR JPMorgan OR Goldman Sachs OR Morgan Stanley OR Wells Fargo OR Deutsche Bank',
+  'Samsung OR Druva OR Databricks OR PayPal OR Stripe OR Intuit OR LinkedIn OR Airbnb OR Rubrik OR Nutanix',
+  '(software OR developer OR engineer) (Google OR Microsoft OR Amazon OR Flipkart OR PhonePe OR Razorpay OR Swiggy OR Zomato OR Zepto OR Paytm OR Groww OR CRED OR Uber OR Atlassian)'
+];
+
+// Targeted queries for Tech Internships (Frontend, Backend, SDE, Software Engineer)
 const INTERNSHIP_QUERIES = [
   '"frontend intern" OR "frontend internship" OR "front end intern" OR "react intern"',
   '"backend intern" OR "backend internship" OR "back end intern" OR "node intern"',
@@ -37,9 +52,8 @@ const INTERNSHIP_QUERIES = [
   '(intern OR internship) (Atlassian OR CRED OR Groww OR Paytm OR BrowserStack OR Postman OR Chargebee OR InMobi OR Rubrik OR Databricks OR Stripe OR Apple OR LinkedIn OR Airbnb)'
 ];
 
-const DEV_INTERN_REGEX = /(frontend|front[\s-]?end|backend|back[\s-]?end|full[\s-]?stack|software|developer|engineer|sde|web|react|node|python|java|javascript|typescript|golang|cloud|ai|ml|data)/i;
-const STRICT_INTERN_REGEX = /(intern|internship|trainee)/i;
-const EXCLUDE_REGEX = /(sap abap|salesforce admin|tax|director|civil|mechanical|technician|hr|recruiter|sales|finance|accountant|telecaller|bpo|hardware lab|synthesis|power engineer|marketing|business development|bda|content|graphic design|operations)/i;
+const STRICT_DEV_REGEX = /(software|developer|engineer|sde|full[\s-]?stack|frontend|front[\s-]?end|backend|back[\s-]?end|web|react|node|python|java|javascript|typescript|golang|cloud|ai|ml|data|intern|trainee)/i;
+const EXCLUDE_REGEX = /(sap abap|salesforce admin|tax|director|civil|mechanical|technician|hr|recruiter|sales|finance|accountant|telecaller|bpo|hardware lab|synthesis|power engineer|audit|vendor consultant|process lead|marketing|business development|bda|content|graphic design|operations)/i;
 
 function decodeHtml(str) {
   if (!str) return '';
@@ -49,6 +63,14 @@ function decodeHtml(str) {
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'");
+}
+
+function getExperience(job) {
+  const title = job.title || '';
+  if (/intern|trainee|fresher/i.test(title)) return 'Internship';
+  if (/Senior|Sr\b|Lead|Principal|III|IV|Architect|Director|Manager/i.test(title)) return 'Senior Level';
+  if (/Associate|Junior|Jr\b|Entry|Graduate/i.test(title)) return 'Entry / Associate (0 - 1+ Years)';
+  return '1+ Years / Mid Level';
 }
 
 function parseMinutesAgo(postedAgo) {
@@ -64,102 +86,143 @@ function parseMinutesAgo(postedAgo) {
   return 999999;
 }
 
-async function fetchLinkedInInternships(query, start = 0) {
-  const url = `https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=${encodeURIComponent(query)}&location=India&f_TPR=r2592000&sortBy=DD&start=${start}`;
-  try {
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-      }
-    });
-    if (!res.ok) return [];
-    const html = await res.text();
-    const cards = html.split('<li>').slice(1);
-    const jobs = [];
-    for (const c of cards) {
-      const titleRaw = (c.match(/<h3 class="base-search-card__title">([\s\S]*?)<\/h3>/) || [])[1]?.trim();
-      const companyRaw = (c.match(/<h4 class="base-search-card__subtitle">([\s\S]*?)<\/h4>/) || [])[1]?.replace(/<[^>]+>/g, '').trim();
-      const locRaw = (c.match(/<span class="job-search-card__location">([\s\S]*?)<\/span>/) || [])[1]?.trim();
-      const link = (c.match(/<a class="base-card__full-link[^"]*" href="([^"]+)"/) || [])[1]?.split('?')[0];
-      const postedAgo = (c.match(/<time[^>]*>([\s\S]*?)<\/time>/) || [])[1]?.trim() || '';
-      const postedDate = (c.match(/datetime="([^"]+)"/) || [])[1] || '';
+async function fetchLinkedInCards(query, timeFilter = 'r86400', pages = [0, 10, 20]) {
+  const jobs = [];
+  for (const start of pages) {
+    const url = `https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=${encodeURIComponent(query)}&location=India&f_TPR=${timeFilter}&sortBy=DD&start=${start}`;
+    try {
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+        }
+      });
+      if (!res.ok) continue;
+      const html = await res.text();
+      const cards = html.split('<li>').slice(1);
+      for (const c of cards) {
+        const titleRaw = (c.match(/<h3 class="base-search-card__title">([\s\S]*?)<\/h3>/) || [])[1]?.trim();
+        const companyRaw = (c.match(/<h4 class="base-search-card__subtitle">([\s\S]*?)<\/h4>/) || [])[1]?.replace(/<[^>]+>/g, '').trim();
+        const locRaw = (c.match(/<span class="job-search-card__location">([\s\S]*?)<\/span>/) || [])[1]?.trim();
+        const link = (c.match(/<a class="base-card__full-link[^"]*" href="([^"]+)"/) || [])[1]?.split('?')[0];
+        const postedAgo = (c.match(/<time[^>]*>([\s\S]*?)<\/time>/) || [])[1]?.trim() || '';
+        const postedDate = (c.match(/datetime="([^"]+)"/) || [])[1] || '';
 
-      if (titleRaw && companyRaw && link) {
-        jobs.push({
-          title: decodeHtml(titleRaw),
-          companyName: decodeHtml(companyRaw),
-          location: decodeHtml(locRaw || 'India'),
-          link,
-          postedAgo,
-          postedDate,
-          minutesAgo: parseMinutesAgo(postedAgo)
-        });
+        if (titleRaw && companyRaw && link) {
+          jobs.push({
+            title: decodeHtml(titleRaw),
+            companyName: decodeHtml(companyRaw),
+            location: decodeHtml(locRaw || 'India'),
+            link,
+            postedAgo,
+            postedDate,
+            minutesAgo: parseMinutesAgo(postedAgo)
+          });
+        }
       }
+      await new Promise(r => setTimeout(r, 250));
+    } catch (e) {
+      // continue
     }
-    return jobs;
-  } catch (e) {
-    return [];
   }
+  return jobs;
 }
 
-async function runJobHunter() {
-  console.log('🚀 Starting Exclusively Tech Internships Hunter...');
-  console.log('🎯 Categories: Frontend, Backend, Software Engineer, SDE Internships');
+async function scrapeViaDirectLinkedIn() {
+  console.log('⚡ Using Direct LinkedIn Scraper (Past 24 Hours, Sorted Newest First)...');
+  const allJobs = [];
 
-  const rawJobs = [];
-  for (const q of INTERNSHIP_QUERIES) {
-    for (const start of [0, 10, 20]) {
-      const jobs = await fetchLinkedInInternships(q, start);
-      rawJobs.push(...jobs);
-      await new Promise(r => setTimeout(r, 250));
-    }
+  // 1. Fetch fresh postings from Top 80 Product Companies in the past 24 hours
+  for (const query of SEARCH_QUERIES) {
+    const jobs = await fetchLinkedInCards(query, 'r86400', [0, 10, 20]);
+    allJobs.push(...jobs);
   }
 
-  console.log(`\n⏳ Processing ${rawJobs.length} gathered internship listings...`);
+  // 2. Fetch fresh internships (Frontend, Backend, SDE, Software Engineering)
+  for (const iq of INTERNSHIP_QUERIES) {
+    const jobs = await fetchLinkedInCards(iq, 'r2592000', [0, 10]);
+    allJobs.push(...jobs);
+  }
 
+  return allJobs;
+}
+
+function filterAndDeduplicate(rawJobs) {
   const seenUrls = new Set();
   const seenSignatures = new Set();
-  const matchedInternships = [];
+  const matchedJobs = [];
 
   for (const job of rawJobs) {
     if (!job.title || !job.companyName || !job.link) continue;
     const cleanLink = job.link.split('?')[0];
     if (seenUrls.has(cleanLink)) continue;
 
+    const companyName = job.companyName.trim();
     const title = job.title.trim();
-    const company = job.companyName.trim();
-    const sig = `${company.toLowerCase()}|${title.toLowerCase()}`;
+    const sig = `${companyName.toLowerCase()}|${title.toLowerCase()}`;
     if (seenSignatures.has(sig)) continue;
 
-    // Must be strictly an internship and tech role
-    if (STRICT_INTERN_REGEX.test(title) && DEV_INTERN_REGEX.test(title) && !EXCLUDE_REGEX.test(title)) {
+    const isTopProduct = TARGET_COMPANIES.some(t => 
+      new RegExp(`(^|\\b|\\s)${t.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}(\\b|\\s|$)`, 'i').test(companyName)
+    );
+
+    const isInternship = /intern|internship|trainee/i.test(title);
+
+    // Accept if it's from our 80 top product companies OR a relevant developer internship
+    if (!isTopProduct && !isInternship) continue;
+
+    if (STRICT_DEV_REGEX.test(title) && !EXCLUDE_REGEX.test(title)) {
       seenUrls.add(cleanLink);
       seenSignatures.add(sig);
-
-      const isTopProduct = TARGET_80_COMPANIES.some(t => 
-        new RegExp(`(^|\\b|\\s)${t.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}(\\b|\\s|$)`, 'i').test(company)
-      );
-
-      matchedInternships.push({
+      matchedJobs.push({
         ...job,
         title,
-        companyName: company,
+        companyName,
         link: cleanLink,
-        isTopProduct
+        isTopProduct,
+        isInternship
       });
     }
   }
 
-  // Priority sort: Top Product-based companies first, then newest posted first
-  matchedInternships.sort((a, b) => {
+  // Sort: Top Product Internships & Roles first, newest posted first
+  matchedJobs.sort((a, b) => {
     if (a.isTopProduct && !b.isTopProduct) return -1;
     if (!a.isTopProduct && b.isTopProduct) return 1;
     return (a.minutesAgo ?? 999999) - (b.minutesAgo ?? 999999);
   });
 
-  const selectedJobs = matchedInternships.slice(0, 30);
-  console.log(`🎯 Total Curated Tech Internships: ${selectedJobs.length}`);
+  return matchedJobs;
+}
+
+async function runJobHunter() {
+  console.log('🚀 Starting Job Hunter Daily Automated Run...');
+  console.log('🎯 Targeting: Top 80 Product Companies + Tech Internships (Latest Today)');
+
+  const rawJobs = await scrapeViaDirectLinkedIn();
+  console.log(`\n⏳ Processing ${rawJobs.length} gathered job listings...`);
+
+  const matchedJobs = filterAndDeduplicate(rawJobs);
+  console.log(`🎯 Quality matches found: ${matchedJobs.length}`);
+
+  const internships = matchedJobs.filter(j => j.isInternship);
+  const developerRoles = matchedJobs.filter(j => !j.isInternship);
+
+  console.log(`   - Internships: ${internships.length}`);
+  console.log(`   - 1+ YOE / Experienced Roles: ${developerRoles.length}`);
+
+  // Guarantee minimum 5 internships if available, then developer roles
+  const targetInternCount = Math.min(8, internships.length);
+  const selectedInternships = internships.slice(0, targetInternCount);
+  const remainingSlots = 30 - selectedInternships.length;
+  const otherInternships = internships.slice(targetInternCount);
+  const selectedJobs = [
+    ...selectedInternships,
+    ...developerRoles.slice(0, remainingSlots)
+  ];
+  if (selectedJobs.length < 30 && otherInternships.length > 0) {
+    selectedJobs.push(...otherInternships.slice(0, 30 - selectedJobs.length));
+  }
 
   const downloadsDir = path.join(os.homedir(), 'Downloads');
   if (!fs.existsSync(downloadsDir)) {
@@ -167,7 +230,7 @@ async function runJobHunter() {
   }
 
   const dateStr = new Date().toISOString().split('T')[0];
-  const outputFileName = `Daily_Tech_Internships_${dateStr}.csv`;
+  const outputFileName = `Daily_Top_Product_Jobs_${dateStr}.csv`;
   const outputPath = path.join(downloadsDir, outputFileName);
 
   const csvRows = [
@@ -175,13 +238,14 @@ async function runJobHunter() {
   ];
 
   selectedJobs.forEach((job, index) => {
-    const posted = job.postedAgo ? `${job.postedAgo} (${job.postedDate || dateStr})` : (job.postedDate || 'Recent');
+    const exp = getExperience(job);
+    const posted = job.postedAgo ? `${job.postedAgo} (${job.postedDate || dateStr})` : (job.postedDate || 'Today');
     csvRows.push([
       index + 1,
       job.title || '',
       job.companyName || '',
       job.location || 'India',
-      'Internship',
+      exp,
       posted,
       job.link || ''
     ].map(escapeCsv).join(','));
@@ -191,7 +255,7 @@ async function runJobHunter() {
   console.log(`📁 Saved CSV locally: ${outputPath}`);
 
   if (GMAIL_APP_PASSWORD) {
-    console.log(`\n📧 Sending daily internship digest to: ${RECIPIENT_EMAIL}...`);
+    console.log(`\n📧 Sending daily digest to: ${RECIPIENT_EMAIL}...`);
     await sendJobDigestEmail({
       recipient: RECIPIENT_EMAIL,
       dateStr,
@@ -199,6 +263,8 @@ async function runJobHunter() {
       csvPath: outputPath,
       csvFileName: outputFileName
     });
+  } else {
+    console.log(`\nℹ️ Email not sent: GMAIL_APP_PASSWORD environment variable is not set.`);
   }
 
   return selectedJobs;
@@ -215,22 +281,23 @@ async function sendJobDigestEmail({ recipient, dateStr, jobs, csvPath, csvFileNa
     });
 
     const whatsappTextBlocks = jobs.map(job => {
+      const exp = getExperience(job);
       const cleanLink = job.link.split('?')[0];
 
       return `Company : ${job.companyName}
 Role : ${job.title}
 Location : ${job.location || 'India'}
-Experience : Internship
+Experience : ${exp}
 Link : ${cleanLink}`;
     }).join('\n\n');
 
     const htmlContent = `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 800px; margin: auto; padding: 20px; background-color: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0;">
         <h2 style="color: #0f172a; border-bottom: 2px solid #2563eb; padding-bottom: 10px; margin-top: 0;">
-          🎓 Daily Tech Internships Digest (${dateStr})
+          🚀 Daily Top Product Companies & Internships Digest (${dateStr})
         </h2>
         <p style="color: #475569; font-size: 15px;">
-          Hi Syed, here are today's curated <strong>Frontend, Backend, SDE, and Software Engineer Internships</strong> across top product companies and fast-growing tech teams in India.
+          Hi Syed, here are today's fresh developer and internship openings strictly filtered from the <strong>Top 80 Product-Based Companies</strong> and tech teams in India (sorted newest first).
         </p>
 
         <!-- WHATSAPP READY COPY BLOCK -->
@@ -242,7 +309,7 @@ Link : ${cleanLink}`;
         </div>
 
         <p style="color: #1e293b; font-size: 14px; margin-top: 20px; background-color: #eff6ff; padding: 12px; border-radius: 6px; border: 1px solid #bfdbfe;">
-          📎 <strong>CSV Spreadsheet Attached:</strong> <code>${csvFileName}</code> is attached to this email containing all curated internships.
+          📎 <strong>CSV Spreadsheet Attached:</strong> <code>${csvFileName}</code> is attached to this email containing all curated jobs.
         </p>
       </div>
     `;
@@ -250,7 +317,7 @@ Link : ${cleanLink}`;
     await transporter.sendMail({
       from: `"Job Hunter Bot" <${SENDER_EMAIL}>`,
       to: recipient,
-      subject: `🎯 [Tech Internships] Frontend, Backend, SDE & Software Engineer (${dateStr})`,
+      subject: `🎯 [Top 80 Product Companies] Today's Latest Jobs & Internships (${dateStr})`,
       text: whatsappTextBlocks,
       html: htmlContent,
       attachments: [
