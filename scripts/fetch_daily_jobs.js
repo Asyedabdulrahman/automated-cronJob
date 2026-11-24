@@ -30,30 +30,19 @@ const TARGET_COMPANIES = [
   "LinkedIn", "Airbnb", "Rubrik", "Confluent", "Twilio", "Nutanix", "VMware", "Broadcom"
 ];
 
-// Targeted search queries for Top Product Companies
+// Targeted search queries strictly for Software Engineer, SDE, and SDE Internship
 const SEARCH_QUERIES = [
-  'Google OR Microsoft OR Amazon OR Adobe OR Apple OR Uber OR NVIDIA OR Salesforce OR Atlassian',
-  'ServiceNow OR Cisco OR Oracle OR Qualcomm OR ARM OR Flipkart OR PhonePe OR Razorpay OR Freshworks',
-  'CRED OR Swiggy OR Zomato OR Zepto OR Dream11 OR Groww OR Navi OR Paytm OR BrowserStack OR Postman',
-  'Chargebee OR Zoho OR InMobi OR Myntra OR Delhivery OR Policybazaar OR Darwinbox OR Acko OR Cashfree',
-  'Walmart OR Target OR JPMorgan OR Goldman Sachs OR Morgan Stanley OR Wells Fargo OR Deutsche Bank',
-  'Samsung OR Druva OR Databricks OR PayPal OR Stripe OR Intuit OR LinkedIn OR Airbnb OR Rubrik OR Nutanix',
-  '(software OR developer OR engineer) (Google OR Microsoft OR Amazon OR Flipkart OR PhonePe OR Razorpay OR Swiggy OR Zomato OR Zepto OR Paytm OR Groww OR CRED OR Uber OR Atlassian)'
+  '"Software Engineer" OR "Software Development Engineer" OR "SDE" (Google OR Microsoft OR Amazon OR Adobe OR Apple OR Uber OR NVIDIA OR Salesforce OR Atlassian)',
+  '"Software Engineer" OR "Software Development Engineer" OR "SDE" (ServiceNow OR Cisco OR Oracle OR Qualcomm OR ARM OR Flipkart OR PhonePe OR Razorpay OR Freshworks)',
+  '"Software Engineer" OR "Software Development Engineer" OR "SDE" (CRED OR Swiggy OR Zomato OR Zepto OR Dream11 OR Groww OR Navi OR Paytm OR BrowserStack OR Postman)',
+  '"Software Engineer" OR "Software Development Engineer" OR "SDE" (Walmart OR Target OR JPMorgan OR Goldman Sachs OR Morgan Stanley OR Wells Fargo OR Deutsche Bank)',
+  '"Software Engineer" OR "Software Development Engineer" OR "SDE" (Samsung OR Druva OR Databricks OR PayPal OR Stripe OR Intuit OR LinkedIn OR Airbnb OR Rubrik OR Nutanix)',
+  '("SDE Intern" OR "SDE Internship" OR "Software Engineer Intern" OR "Software Development Engineer Intern") India'
 ];
 
-// Targeted queries for Tech Internships (Frontend, Backend, SDE, Software Engineer)
-const INTERNSHIP_QUERIES = [
-  '"frontend intern" OR "frontend internship" OR "front end intern" OR "react intern"',
-  '"backend intern" OR "backend internship" OR "back end intern" OR "node intern"',
-  '"sde intern" OR "sde internship" OR "software development intern"',
-  '"software engineer intern" OR "software engineering intern"',
-  '"full stack intern" OR "full stack developer intern" OR "web development intern"',
-  '(intern OR internship) (Google OR Microsoft OR Amazon OR Adobe OR Salesforce OR Uber OR NVIDIA OR ServiceNow OR Cisco OR Oracle OR Qualcomm OR Flipkart OR PhonePe OR Razorpay OR Swiggy OR Zomato OR Zepto OR Zoho OR Samsung OR Walmart OR Goldman Sachs OR Morgan Stanley OR PayPal OR Intuit)',
-  '(intern OR internship) (Atlassian OR CRED OR Groww OR Paytm OR BrowserStack OR Postman OR Chargebee OR InMobi OR Rubrik OR Databricks OR Stripe OR Apple OR LinkedIn OR Airbnb)'
-];
-
-const STRICT_DEV_REGEX = /(software|developer|engineer|sde|full[\s-]?stack|frontend|front[\s-]?end|backend|back[\s-]?end|web|react|node|python|java|javascript|typescript|golang|cloud|ai|ml|data|intern|trainee)/i;
-const EXCLUDE_REGEX = /(sap abap|salesforce admin|tax|director|civil|mechanical|technician|hr|recruiter|sales|finance|accountant|telecaller|bpo|hardware lab|synthesis|power engineer|audit|vendor consultant|process lead|marketing|business development|bda|content|graphic design|operations)/i;
+// Strictly Software Engineer, SDE, and SDE Internship
+const SDE_ONLY_REGEX = /\b(software\s*engineer|software\s*development\s*engineer|sde|software\s*developer)\b/i;
+const EXCLUDE_NON_SDE = /(support|financial\s*analyst|sales|recruiter|hr|hardware\s*lab|mechanical|civil|marketing|accountant|consultant|technician)/i;
 
 function decodeHtml(str) {
   if (!str) return '';
@@ -68,8 +57,8 @@ function decodeHtml(str) {
 function getExperience(job) {
   const title = job.title || '';
   if (/intern|trainee|fresher/i.test(title)) return 'Internship';
-  if (/Senior|Sr\b|Lead|Principal|III|IV|Architect|Director|Manager/i.test(title)) return 'Senior Level';
-  if (/Associate|Junior|Jr\b|Entry|Graduate/i.test(title)) return 'Entry / Associate (0 - 1+ Years)';
+  if (/Senior|Sr\b|Lead|Principal|III|IV|Staff|Architect|Director|Manager/i.test(title)) return 'Senior Level';
+  if (/Associate|Junior|Jr\b|Entry|Graduate|I\b/i.test(title)) return 'Entry / Associate (0 - 1+ Years)';
   return '1+ Years / Mid Level';
 }
 
@@ -82,7 +71,6 @@ function parseMinutesAgo(postedAgo) {
   if (lower.includes('minute')) return num;
   if (lower.includes('hour')) return num * 60;
   if (lower.includes('day')) return num * 1440;
-  if (lower.includes('week')) return num * 10080;
   return 999999;
 }
 
@@ -129,18 +117,11 @@ async function fetchLinkedInCards(query, timeFilter = 'r86400', pages = [0, 10, 
 }
 
 async function scrapeViaDirectLinkedIn() {
-  console.log('⚡ Using Direct LinkedIn Scraper (Past 24 Hours, Sorted Newest First)...');
+  console.log('⚡ Scraping LinkedIn for today\'s Software Engineer, SDE, and SDE Internship postings (Past 24h, Newest First)...');
   const allJobs = [];
 
-  // 1. Fetch fresh postings from Top 80 Product Companies in the past 24 hours
   for (const query of SEARCH_QUERIES) {
     const jobs = await fetchLinkedInCards(query, 'r86400', [0, 10, 20]);
-    allJobs.push(...jobs);
-  }
-
-  // 2. Fetch fresh internships (Frontend, Backend, SDE, Software Engineering)
-  for (const iq of INTERNSHIP_QUERIES) {
-    const jobs = await fetchLinkedInCards(iq, 'r2592000', [0, 10]);
     allJobs.push(...jobs);
   }
 
@@ -162,42 +143,43 @@ function filterAndDeduplicate(rawJobs) {
     const sig = `${companyName.toLowerCase()}|${title.toLowerCase()}`;
     if (seenSignatures.has(sig)) continue;
 
+    // Strictly Software Engineer, SDE, SDE Internship
+    if (!SDE_ONLY_REGEX.test(title)) continue;
+    if (EXCLUDE_NON_SDE.test(title)) continue;
+
+    // Must be listed today (within 24 hours / 1440 minutes)
+    if (job.minutesAgo > 1440) continue;
+
     const isTopProduct = TARGET_COMPANIES.some(t => 
       new RegExp(`(^|\\b|\\s)${t.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}(\\b|\\s|$)`, 'i').test(companyName)
     );
 
-    const isInternship = /intern|internship|trainee/i.test(title);
+    const isSdeIntern = /intern|internship|trainee/i.test(title);
 
-    // Accept if it's from our 80 top product companies OR a relevant developer internship
-    if (!isTopProduct && !isInternship) continue;
+    // Filter to top 80 product companies or verified tech internships
+    if (!isTopProduct && !isSdeIntern) continue;
 
-    if (STRICT_DEV_REGEX.test(title) && !EXCLUDE_REGEX.test(title)) {
-      seenUrls.add(cleanLink);
-      seenSignatures.add(sig);
-      matchedJobs.push({
-        ...job,
-        title,
-        companyName,
-        link: cleanLink,
-        isTopProduct,
-        isInternship
-      });
-    }
+    seenUrls.add(cleanLink);
+    seenSignatures.add(sig);
+    matchedJobs.push({
+      ...job,
+      title,
+      companyName,
+      link: cleanLink,
+      isTopProduct,
+      isSdeIntern
+    });
   }
 
-  // Sort: Top Product Internships & Roles first, newest posted first
-  matchedJobs.sort((a, b) => {
-    if (a.isTopProduct && !b.isTopProduct) return -1;
-    if (!a.isTopProduct && b.isTopProduct) return 1;
-    return (a.minutesAgo ?? 999999) - (b.minutesAgo ?? 999999);
-  });
+  // Sort strictly by newest posted first (posted today)
+  matchedJobs.sort((a, b) => (a.minutesAgo ?? 999999) - (b.minutesAgo ?? 999999));
 
   return matchedJobs;
 }
 
 async function runJobHunter() {
   console.log('🚀 Starting Job Hunter Daily Automated Run...');
-  console.log('🎯 Targeting: Top 80 Product Companies + Tech Internships (Latest Today)');
+  console.log('🎯 Scope: Strictly Today\'s Listed Jobs -> Software Engineer, SDE, and SDE Internships');
 
   const rawJobs = await scrapeViaDirectLinkedIn();
   console.log(`\n⏳ Processing ${rawJobs.length} gathered job listings...`);
@@ -205,24 +187,13 @@ async function runJobHunter() {
   const matchedJobs = filterAndDeduplicate(rawJobs);
   console.log(`🎯 Quality matches found: ${matchedJobs.length}`);
 
-  const internships = matchedJobs.filter(j => j.isInternship);
-  const developerRoles = matchedJobs.filter(j => !j.isInternship);
+  const internships = matchedJobs.filter(j => j.isSdeIntern);
+  const developerRoles = matchedJobs.filter(j => !j.isSdeIntern);
 
-  console.log(`   - Internships: ${internships.length}`);
-  console.log(`   - 1+ YOE / Experienced Roles: ${developerRoles.length}`);
+  console.log(`   - SDE Internships: ${internships.length}`);
+  console.log(`   - Software Engineer / SDE Roles: ${developerRoles.length}`);
 
-  // Guarantee minimum 5 internships if available, then developer roles
-  const targetInternCount = Math.min(8, internships.length);
-  const selectedInternships = internships.slice(0, targetInternCount);
-  const remainingSlots = 30 - selectedInternships.length;
-  const otherInternships = internships.slice(targetInternCount);
-  const selectedJobs = [
-    ...selectedInternships,
-    ...developerRoles.slice(0, remainingSlots)
-  ];
-  if (selectedJobs.length < 30 && otherInternships.length > 0) {
-    selectedJobs.push(...otherInternships.slice(0, 30 - selectedJobs.length));
-  }
+  const selectedJobs = [...internships, ...developerRoles].slice(0, 30);
 
   const downloadsDir = path.join(os.homedir(), 'Downloads');
   if (!fs.existsSync(downloadsDir)) {
@@ -294,10 +265,10 @@ Link : ${cleanLink}`;
     const htmlContent = `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 800px; margin: auto; padding: 20px; background-color: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0;">
         <h2 style="color: #0f172a; border-bottom: 2px solid #2563eb; padding-bottom: 10px; margin-top: 0;">
-          🚀 Daily Top Product Companies & Internships Digest (${dateStr})
+          🚀 Today's Listed Jobs: Software Engineer, SDE & SDE Internships (${dateStr})
         </h2>
         <p style="color: #475569; font-size: 15px;">
-          Hi Syed, here are today's fresh developer and internship openings strictly filtered from the <strong>Top 80 Product-Based Companies</strong> and tech teams in India (sorted newest first).
+          Hi Syed, here are today's strictly curated <strong>Software Engineer, SDE, and SDE Internship</strong> openings from the Top Product-Based Companies in India (posted today / last 24 hours, sorted newest first).
         </p>
 
         <!-- WHATSAPP READY COPY BLOCK -->
@@ -317,7 +288,7 @@ Link : ${cleanLink}`;
     await transporter.sendMail({
       from: `"Job Hunter Bot" <${SENDER_EMAIL}>`,
       to: recipient,
-      subject: `🎯 [Top 80 Product Companies] Today's Latest Jobs & Internships (${dateStr})`,
+      subject: `🎯 [Today's SDE & Software Engineer Jobs] ${dateStr}`,
       text: whatsappTextBlocks,
       html: htmlContent,
       attachments: [
